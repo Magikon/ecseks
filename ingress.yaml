@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zeroconnectapi
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: '/v1/docs'
+    alb.ingress.kubernetes.io/success-codes: '301'
+spec:
+  defaultBackend:
+    service:
+      name: zeroconnectapi
+      port:
+        number: 80
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: zeroconnectapi
+              port:
+                number: 80

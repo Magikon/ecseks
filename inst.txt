@@ -1,0 +1,388 @@
+#if not exists create ec2 key pairs with name "ec2key", type RSA, format .pem
+
+apiVersion: eksctl.io/v1alpha5
+availabilityZones:
+- us-east-2a
+- us-east-2b
+- us-east-2c
+iam:
+  vpcResourceControllerPolicy: true
+  withOIDC: true
+kind: ClusterConfig
+metadata:
+  name: zerosystems-cluster
+  region: us-east-2
+  version: "1.21"
+privateCluster:
+  enabled: false
+vpc:
+  autoAllocateIPv6: false
+  cidr: 10.8.0.0/16
+  clusterEndpoints:
+    privateAccess: false
+    publicAccess: true
+  manageSharedNodeSecurityGroupRules: true
+  nat:
+    gateway: Single
+cloudWatch:
+    clusterLogging:
+        enableTypes: ["audit", "authenticator", "api", "controllerManager", "scheduler"]
+managedNodeGroups:
+  - name: nodegroup2a
+    amiFamily: AmazonLinux2
+    instanceType: t3.medium
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    ssh: 
+      publicKeyName: ec2key
+    volumeSize: 80
+    volumeType: gp2
+    privateNetworking: true
+    availabilityZones: ["us-east-2a"]
+    labels:
+      enviroment: development
+      alpha.eksctl.io/cluster-name: zerosystems-cluster
+      alpha.eksctl.io/nodegroup-name: nodegroup2a
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+      alpha.eksctl.io/nodegroup-name: nodegroup2a
+      alpha.eksctl.io/nodegroup-type: managed
+    iam:
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        cloudWatch: true
+  - name: nodegroup2b
+    amiFamily: AmazonLinux2
+    instanceType: t3.medium
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    ssh: 
+      publicKeyName: ec2key
+    volumeSize: 80
+    volumeType: gp2
+    privateNetworking: true
+    availabilityZones: ["us-east-2b"]
+    labels:
+      enviroment: development
+      alpha.eksctl.io/cluster-name: zerosystems-cluster
+      alpha.eksctl.io/nodegroup-name: nodegroup2b
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+      alpha.eksctl.io/nodegroup-name: nodegroup2b
+      alpha.eksctl.io/nodegroup-type: managed
+    iam:
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        cloudWatch: true
+  - name: nodegroup2c
+    amiFamily: AmazonLinux2
+    instanceType: t3.medium
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    ssh: 
+      publicKeyName: ec2key
+    volumeSize: 80
+    volumeType: gp2
+    privateNetworking: true
+    availabilityZones: ["us-east-2c"]
+    labels:
+      enviroment: development
+      alpha.eksctl.io/cluster-name: zerosystems-cluster
+      alpha.eksctl.io/nodegroup-name: nodegroup2c
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+      alpha.eksctl.io/nodegroup-name: nodegroup2c
+      alpha.eksctl.io/nodegroup-type: managed
+    iam:
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        cloudWatch: true
+
+
+eksctl create cluster -f eksctl.yaml --profile zero
+
+#checking iam oidc identity provider
+aws eks describe-cluster --name zerosystems-cluster --query "cluster.identity.oidc.issuer" --output text --profile zero --region us-east-2
+#output https://oidc.eks.us-east-2.amazonaws.com/id/8B83D9CDC212FFD9F5415C5506A2B62C
+aws iam list-open-id-connect-providers --profile zero --region us-east-2 | grep 8B83D9CDC212FFD9F5415C5506A2B62C
+#output  "Arn": "arn:aws:iam::139013895924:oidc-provider/oidc.eks.us-east-2.amazonaws.com/id/8B83D9CDC212FFD9F5415C5506A2B62C"
+#if output upsent
+eksctl utils associate-iam-oidc-provider --cluster zerosystems-cluster --approve --profile zero --region us-east-2
+
+
+aws sts get-caller-identity
+aws eks update-kubeconfig --region us-east-2 --name zerosystems-cluster --profile zero 
+
+eksctl create iamserviceaccount \
+  --cluster=zerosystems-cluster \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller \
+  --role-name "AmazonEKSLoadBalancerControllerRole" \
+  --attach-policy-arn=arn:aws:iam::139013895924:policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve --profile zero --region us-east-2
+
+kubectl annotate serviceaccount -n kube-system aws-load-balancer-controller eks.amazonaws.com/sts-regional-endpoints=true 
+
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+-n kube-system \
+--set clusterName=zerosystems-cluster \
+--set serviceAccount.create=false \
+--set serviceAccount.name=aws-load-balancer-controller \
+--set region=us-east-2 \
+--set vpcId=vpc-0730310b1123f0d72 \
+--set image.repository=602401143452.dkr.ecr.us-east-2.amazonaws.com/amazon/aws-load-balancer-controller 
+
+
+#https://github.com/aws/secrets-store-csi-driver-provider-aws
+helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+helm repo update
+helm install -n kube-system --set syncSecret.enabled=true csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver 
+helm upgrade --install -n kube-system --set syncSecret.enabled=true csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver
+
+#https://secrets-store-csi-driver.sigs.k8s.io/getting-started/usage.html
+
+
+kubectl apply -f https://raw.githubusercontent.com/aws/secrets-store-csi-driver-provider-aws/main/deployment/aws-provider-installer.yaml
+
+# set terminal session variabls
+REGION=us-east-2
+CLUSTERNAME=zerosystems-cluster
+PROFILE=zero
+
+aws --profile "$PROFILE" --region "$REGION" secretsmanager  create-secret --name ZeroSecret --secret-string '{"ASPNETCORE_ENVIRONMENT":"Development","ZC_DB__DATABASENAME":"ZeroDb","ZC_DB__PASSWORD":"zeroconnect","ZC_DB__SERVERURL":"zerodb.cgjxmm557ygg.us-east-2.rds.amazonaws.com","ZC_DB__USERNAME":"admin","PAT":"p7ahsjwvjkuawy3boimjgmzpvmb7ei6a5wbkuaepjdaserljjb7q","USER_VARIABLE":"haghajanyan@zerosystems.com","ZC_DB__AUTHENTICATIONTYPE":"credentials"}'
+
+POLICY_ARN=$(aws --profile "$PROFILE" --region "$REGION" --query Policy.Arn --output text iam create-policy --policy-name secretsmanager-policy --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [ {
+        "Effect": "Allow",
+        "Action": ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+        "Resource": "*"
+    } ]
+}')
+
+#arn:aws:iam::139013895924:policy/secretsmanager-policy
+
+eksctl create iamserviceaccount --name secretsmanager-policy-sa --profile="$PROFILE" --region="$REGION" --cluster "$CLUSTERNAME" --attach-policy-arn "$POLICY_ARN" --approve --override-existing-serviceaccounts
+
+2022-05-11 16:30:59 [ℹ]  eksctl version 0.73.0
+2022-05-11 16:30:59 [ℹ]  using region us-east-2
+2022-05-11 16:31:02 [ℹ]  2 existing iamserviceaccount(s) (kube-system/aws-load-balancer-controller,kube-system/aws-node) will be excluded
+2022-05-11 16:31:02 [ℹ]  1 iamserviceaccount (default/secretsmanager-policy-sa) was included (based on the include/exclude rules)
+2022-05-11 16:31:02 [!]  metadata of serviceaccounts that exist in Kubernetes will be updated, as --override-existing-serviceaccounts was set
+2022-05-11 16:31:02 [ℹ]  1 task: {
+    2 sequential sub-tasks: {
+        create IAM role for serviceaccount "default/secretsmanager-policy-sa",
+        create serviceaccount "default/secretsmanager-policy-sa",
+    } }2022-05-11 16:31:02 [ℹ]  building iamserviceaccount stack "eksctl-zerosystems-cluster-addon-iamserviceaccount-default-secretsmanager-policy-sa"
+2022-05-11 16:31:02 [ℹ]  deploying stack "eksctl-zerosystems-cluster-addon-iamserviceaccount-default-secretsmanager-policy-sa"
+2022-05-11 16:31:02 [ℹ]  waiting for CloudFormation stack "eksctl-zerosystems-cluster-addon-iamserviceaccount-default-secretsmanager-policy-sa"
+2022-05-11 16:31:19 [ℹ]  waiting for CloudFormation stack "eksctl-zerosystems-cluster-addon-iamserviceaccount-default-secretsmanager-policy-sa"
+2022-05-11 16:31:36 [ℹ]  waiting for CloudFormation stack "eksctl-zerosystems-cluster-addon-iamserviceaccount-default-secretsmanager-policy-sa"
+2022-05-11 16:31:38 [ℹ]  created serviceaccount "default/secretsmanager-policy-sa"
+
+
+
+cat <<EOF | kubectl create -f -
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: aws-secrets
+spec:
+  provider: aws
+  secretObjects:
+    - secretName: zerosecret
+      type: Opaque
+      data:
+        - objectName: ASPNETCORE_ENVIRONMENT
+          key: ASPNETCORE_ENVIRONMENT
+        - objectName: ZC_DB__DATABASENAME
+          key: ZC_DB__DATABASENAME
+        - objectName: ZC_DB__PASSWORD
+          key: ZC_DB__PASSWORD
+        - objectName: ZC_DB__SERVERURL
+          key: ZC_DB__SERVERURL
+        - objectName: ZC_DB__USERNAME
+          key: ZC_DB__USERNAME
+        - objectName: PAT
+          key: PAT
+        - objectName: USER_VARIABLE
+          key: USER_VARIABLE
+        - objectName: ZC_DB__AUTHENTICATIONTYPE
+          key: ZC_DB__AUTHENTICATIONTYPE
+  parameters:
+    objects: |
+      - objectName: ZeroSecret
+        objectType: secretsmanager
+        jmesPath:
+          - Path: ASPNETCORE_ENVIRONMENT
+            ObjectAlias: ASPNETCORE_ENVIRONMENT
+          - Path: ZC_DB__DATABASENAME
+            ObjectAlias: ZC_DB__DATABASENAME
+          - Path: ZC_DB__PASSWORD
+            ObjectAlias: ZC_DB__PASSWORD
+          - Path: ZC_DB__SERVERURL
+            ObjectAlias: ZC_DB__SERVERURL
+          - Path: ZC_DB__USERNAME
+            ObjectAlias: ZC_DB__USERNAME
+          - Path: PAT
+            ObjectAlias: PAT
+          - Path: USER_VARIABLE
+            ObjectAlias: USER_VARIABLE
+          - Path: ZC_DB__AUTHENTICATIONTYPE
+            ObjectAlias: ZC_DB__AUTHENTICATIONTYPE
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    io.kompose.service: zeroconnectapi
+  name: zeroconnectapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: zeroconnectapi
+  template:
+    metadata:
+      labels:
+        io.kompose.service: zeroconnectapi
+    spec:
+      serviceAccountName: secretsmanager-policy-sa
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "aws-secrets"
+      containers:
+        - name: zero-api
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ASPNETCORE_ENVIRONMENT
+            - name: ZC_DB__DATABASENAME
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__DATABASENAME
+            - name: ZC_DB__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__PASSWORD
+            - name: ZC_DB__SERVERURL
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__SERVERURL
+            - name: ZC_DB__USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__USERNAME
+            - name: PAT
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: PAT
+            - name: USER_VARIABLE
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: USER_VARIABLE
+            - name: ZC_DB__AUTHENTICATIONTYPE
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__AUTHENTICATIONTYPE
+          image: 139013895924.dkr.ecr.us-east-1.amazonaws.com/zeroconnect-sql:latest
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    io.kompose.service: zeroconnectapi
+  name: zeroconnectapi
+spec:
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 80
+      protocol: TCP
+    - name: "https"
+      port: 443
+      targetPort: 443
+      protocol: TCP
+  selector:
+    io.kompose.service: zeroconnectapi
+  type: NodePort
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zeroconnectapi
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: '/v1/docs'
+    alb.ingress.kubernetes.io/success-codes: '301'
+spec:
+  defaultBackend:
+    service:
+      name: zeroconnectapi
+      port:
+        number: 80
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: zeroconnectapi
+              port:
+                number: 80
+EOF
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ kubectl exec -it $(kubectl get pods | awk '/nginx-deployment/{print $1}' | head -1) -- cat /mnt/secrets-store/ZeroSecret; echo
+
+----------------------------------------------
+$(cat /mnt/secrets-store/ZeroSecret | jq -r 'keys[] as $k | "export \($k)=\(.[$k])"')
+
+

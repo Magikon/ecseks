@@ -1,0 +1,109 @@
+eksctl create cluster -f eksctl.yaml --profile <profilename>
+
+aws eks update-kubeconfig  --name zerosystems-cluster --profile <profilename> --region <yourregion>
+eksctl utils associate-iam-oidc-provider --cluster zerosystems-cluster --approve --profile <profilename> --region <yourregion> 
+kubectl annotate serviceaccount -n kube-system aws-load-balancer-controller \ 
+    eks.amazonaws.com/sts-regional-endpoints=true 
+
+Install helm https://helm.sh/docs/intro/install/ 
+
+helm repo add eks https://aws.github.io/eks-charts 
+
+helm repo update 
+
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller -n kube-system --set clusterName=zerosystems-cluster --set serviceAccount.create=false --set serviceAccount.name=aws-load-balancer-controller --set region=us-east-2 --set vpcId=vpc-0730310b1123f0d72 --set image.repository=602401143452.dkr.ecr.us-east-2.amazonaws.com/amazon/aws-load-balancer-controller 
+
+(Get right image from your region https://docs.aws.amazon.com/eks/latest/userguide/add-ons-images.html ) 
+
+ ------------ 
+
+Create rds 
+
+
+
+kubectl apply -f https://raw.githubusercontent.com/aws/secrets-store-csi-driver-provider-aws/main/deployment/aws-provider-installer.yaml
+
+# set terminal session variabls
+REGION=us-east-2
+CLUSTERNAME=zerosystems-cluster
+PROFILE=zero
+
+aws --profile "$PROFILE" --region "$REGION" secretsmanager  create-secret --name ZeroSecret --secret-string '{"ASPNETCORE_ENVIRONMENT":"Development", "DB__DATABASENAME":"ZeroDb", "DB__PASSWORD":"zeroconnect", "DB__SERVERURL":"zerodb.cgjxmm557ygg.us-east-2.rds.amazonaws.com", "DB__USERNAME":"postgres", "PAT":"p7ahsjwvjkuawy3boimjgmzpvmb7ei6a5wbkuaepjdaserljjb7q", "USER_VARIABLE":"haghajanyan@zerosystems.com"}'
+
+POLICY_ARN=$(aws --profile "$PROFILE" --region "$REGION" --query Policy.Arn --output text iam create-policy --policy-name secretsmanager-policy --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [ {
+        "Effect": "Allow",
+        "Action": ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+        "Resource": "*"
+    } ]
+}')
+
+# eksctl utils associate-iam-oidc-provider --region="$REGION" --cluster="$CLUSTERNAME" --approve # Only run this once
+
+eksctl create iamserviceaccount --name secretsmanager-policy-sa --profile="$PROFILE" --region="$REGION" --cluster "$CLUSTERNAME" --attach-policy-arn "$POLICY_ARN" --approve --override-existing-serviceaccounts
+
+cat <<EOF | kubectl create -f -
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: nginx-deployment-aws-secrets
+spec:
+  provider: aws
+  parameters:
+    objects: |
+        - objectName: "ZeroSecret"
+          objectType: "secretsmanager"
+EOF
+cat <<EOF | kubectl create -f -
+kind: Service
+apiVersion: v1
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  selector:
+    app: nginx
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      serviceAccountName: secretsmanager-policy-sa
+      volumes:
+      - name: secrets-store-inline
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "nginx-deployment-aws-secrets"
+      containers:
+      - name: nginx-deployment
+        image: nginx
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: secrets-store-inline
+          mountPath: "/mnt/secrets-store"
+          readOnly: true
+EOF
+
+kubectl exec -it $(kubectl get pods | awk '/nginx-deployment/{print $1}' | head -1) cat /mnt/secrets-store/MySecret; echo
+

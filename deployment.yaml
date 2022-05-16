@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    io.kompose.service: zeroconnectapi
+  name: zeroconnectapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: zeroconnectapi
+  template:
+    metadata:
+      labels:
+        io.kompose.service: zeroconnectapi
+    spec:
+      serviceAccountName: secretsmanager-policy-sa
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "aws-secrets"
+      containers:
+        - name: zero-api
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ASPNETCORE_ENVIRONMENT
+            - name: ZC_DB__DATABASENAME
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__DATABASENAME
+            - name: ZC_DB__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__PASSWORD
+            - name: ZC_DB__SERVERURL
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__SERVERURL
+            - name: ZC_DB__USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__USERNAME
+            - name: PAT
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: PAT
+            - name: USER_VARIABLE
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: USER_VARIABLE
+            - name: ZC_DB__AUTHENTICATIONTYPE
+              valueFrom:
+                secretKeyRef:
+                  name: zerosecret
+                  key: ZC_DB__AUTHENTICATIONTYPE
+          image: 139013895924.dkr.ecr.us-east-1.amazonaws.com/zeroconnect-sql:latest
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+      restartPolicy: Always
+
+--------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    io.kompose.service: zeroconnectapi
+  name: zeroconnectapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: zeroconnectapi
+  template:
+    metadata:
+      labels:
+        io.kompose.service: zeroconnectapi
+    spec:
+      serviceAccountName: secretsmanager-policy-sa
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "aws-secrets"
+      containers:
+        - name: zero-api
+          envFrom:
+            - secretRef:
+                name: zerosecret
+          image: 139013895924.dkr.ecr.us-east-1.amazonaws.com/zeroconnect-sql:latest
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+      restartPolicy: Always
+
