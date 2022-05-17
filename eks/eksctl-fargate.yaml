@@ -1,0 +1,45 @@
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+availabilityZones:
+- us-east-2a
+- us-east-2b
+- us-east-2c
+iam:
+  vpcResourceControllerPolicy: true
+  withOIDC: false
+metadata:
+  name: zerosystems-cluster
+  region: us-east-2
+  version: "1.21"
+privateCluster:
+  enabled: false
+vpc:
+  autoAllocateIPv6: false
+  cidr: 10.8.0.0/16
+  clusterEndpoints:
+    privateAccess: false
+    publicAccess: true
+  manageSharedNodeSecurityGroupRules: true
+  nat:
+    gateway: Single
+cloudWatch:
+    clusterLogging:
+        enableTypes: ["audit", "authenticator"]
+fargateProfiles:
+  - name: fp-default
+    selectors:
+      # All workloads in the "default" Kubernetes namespace will be
+      # scheduled onto Fargate:
+      - namespace: default
+      # All workloads in the "kube-system" Kubernetes namespace will be
+      # scheduled onto Fargate:
+      - namespace: kube-system
+  - name: fp-dev
+    selectors:
+      # All workloads in the "dev" Kubernetes namespace matching the following
+      # label selectors will be scheduled onto Fargate:
+      - namespace: dev
+        labels:
+          env: dev
+          checks: passed
