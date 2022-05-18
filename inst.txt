@@ -386,3 +386,16 @@ EOF
 $(cat /mnt/secrets-store/ZeroSecret | jq -r 'keys[] as $k | "export \($k)=\(.[$k])"')
 
 
+===============================================================================================================
+===============================================================================================================
+Create mssql rds
+Create secret in secret manager
+export PROFILE=<your profile name>
+export REGION=<your desired region>
+aws --profile "$PROFILE" --region "$REGION" secretsmanager  create-secret --name ZeroSecret --secret-string '{"ASPNETCORE_ENVIRONMENT":"Development","ZC_DB__DATABASENAME":"ZeroDb","ZC_DB__PASSWORD":"zeroconnect","ZC_DB__SERVERURL":"zerodb.cgjxmm557ygg.us-east-2.rds.amazonaws.com","ZC_DB__USERNAME":"admin","PAT":"p7ahsjwvjkuawy3boimjgmzpvmb7ei6a5wbkuaepjdaserljjb7q","USER_VARIABLE":"haghajanyan@zerosystems.com","ZC_DB__AUTHENTICATIONTYPE":"credentials"}'
+You will get 3 template files that you need to run sequentially
+templateVPC.yaml
+templateECS.yaml
+templateService.yaml
+Run it with aws cli
+aws cloudformation deploy --stack-name vpc --template-file ./templateVPC.yaml --profile $PROFILE --region $REGION
