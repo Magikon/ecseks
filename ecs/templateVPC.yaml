@@ -8,11 +8,11 @@ Metadata:
         default: 'VPC Parameters'
       Parameters:
       - IPv4CIDR
-Parameters:
   IPv4CIDR:
     Description: 'Class B of VPC (ex. 10.10.0.0/16)'
     Type: String
     Default: '10.10.0.0/16'
+
 Resources:
   VPC:
     Type: 'AWS::EC2::VPC'
@@ -52,10 +52,10 @@ Resources:
       Tags: 
       - Key: Name
         Value: 'ZeroConnectAPI NGW'
-  EgressOnlyInternetGateway:
-    Type: 'AWS::EC2::EgressOnlyInternetGateway'
-    Properties:
-      VpcId: !Ref VPC
+  # EgressOnlyInternetGateway:
+    # Type: 'AWS::EC2::EgressOnlyInternetGateway'
+    # Properties:
+      # VpcId: !Ref VPC
   VPCGatewayAttachment:
     Type: 'AWS::EC2::VPCGatewayAttachment'
     Properties:
@@ -274,7 +274,7 @@ Outputs:
     Value: 'vpc'
   TemplateVersion:
     Description: 'template version.'
-    Value: '13.22.1'
+    Value: '0.1.1'
   StackName:
     Description: 'Stack name.'
     Value: !Sub '${AWS::StackName}'
