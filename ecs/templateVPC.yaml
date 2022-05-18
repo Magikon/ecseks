@@ -7,20 +7,17 @@ Metadata:
     - Label:
         default: 'VPC Parameters'
       Parameters:
-      - ClassB
+      - IPv4CIDR
 Parameters:
-  ClassB:
-    Description: 'Class B of VPC (10.XXX.0.0/16)'
-    Type: Number
-    Default: 10
-    ConstraintDescription: 'Must be in the range [0-255]'
-    MinValue: 0
-    MaxValue: 255
+  IPv4CIDR:
+    Description: 'Class B of VPC (ex. 10.10.0.0/16)'
+    Type: String
+    Default: '10.10.0.0/16'
 Resources:
   VPC:
     Type: 'AWS::EC2::VPC'
     Properties:
-      CidrBlock: !Sub '10.${ClassB}.0.0/16'
+      CidrBlock: !Sub ${IPv4CIDR}
       EnableDnsSupport: true
       EnableDnsHostnames: true
       InstanceTenancy: default
@@ -68,7 +65,7 @@ Resources:
     Type: 'AWS::EC2::Subnet'
     Properties:
       AvailabilityZone: !Select [0, !GetAZs '']
-      CidrBlock: !Sub '10.${ClassB}.0.0/24'
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
       MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
       Tags:
@@ -80,7 +77,7 @@ Resources:
     Type: 'AWS::EC2::Subnet'
     Properties:
       AvailabilityZone: !Select [0, !GetAZs '']
-      CidrBlock: !Sub '10.${ClassB}.10.0/24'
+      CidrBlock: !Select [ 3, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
       VpcId: !Ref VPC
       Tags:
       - Key: Name
@@ -91,7 +88,7 @@ Resources:
     Type: 'AWS::EC2::Subnet'
     Properties:
       AvailabilityZone: !Select [1, !GetAZs '']
-      CidrBlock: !Sub '10.${ClassB}.1.0/24'
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
       MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
       Tags:
@@ -103,7 +100,7 @@ Resources:
     Type: 'AWS::EC2::Subnet'
     Properties:
       AvailabilityZone: !Select [1, !GetAZs '']
-      CidrBlock: !Sub '10.${ClassB}.11.0/24'
+      CidrBlock: !Select [ 4, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
       VpcId: !Ref VPC
       Tags:
       - Key: Name
@@ -114,7 +111,7 @@ Resources:
     Type: 'AWS::EC2::Subnet'
     Properties:
       AvailabilityZone: !Select [2, !GetAZs '']
-      CidrBlock: !Sub '10.${ClassB}.2.0/24'
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
       MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
       Tags:
@@ -126,7 +123,7 @@ Resources:
     Type: 'AWS::EC2::Subnet'
     Properties:
       AvailabilityZone: !Select [2, !GetAZs '']
-      CidrBlock: !Sub '10.${ClassB}.12.0/24'
+      CidrBlock: !Select [ 5, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
       VpcId: !Ref VPC
       Tags:
       - Key: Name
