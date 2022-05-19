@@ -8,6 +8,7 @@ Metadata:
         default: 'VPC Parameters'
       Parameters:
       - IPv4CIDR
+Parameters:
   IPv4CIDR:
     Description: 'Class B of VPC (ex. 10.10.0.0/16)'
     Type: String
