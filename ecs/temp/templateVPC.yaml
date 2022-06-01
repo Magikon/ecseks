@@ -1,0 +1,239 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VPC: template'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'VPC Parameters'
+      Parameters:
+      - IPv4CIDR
+Parameters:
+  IPv4CIDR:
+    Description: 'Class B of VPC (ex. 10.10.0.0/16)'
+    Type: String
+    Default: '10.10.0.0/16'
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Sub ${IPv4CIDR}
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: 'ZeroConnectAPI VPC'
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: 'ZeroConnectAPI IGW'
+  NatEip:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: 'Elastic IP for NatGateway'
+  NatGateway:
+    DependsOn: 
+    - SubnetAPublic
+    - NatEip
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId:
+        Fn::GetAtt:
+          - NatEip
+          - AllocationId
+      SubnetId: !Ref SubnetAPublic
+      Tags: 
+      - Key: Name
+        Value: 'ZeroConnectAPI NGW'
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  SubnetAPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'ECS Public subnet A'
+      - Key: Reach
+        Value: public
+  SubnetAPrivate:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Select [ 3, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'ECS Private subnet A'
+      - Key: Reach
+        Value: private
+  SubnetBPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'ECS Public subnet B'
+      - Key: Reach
+        Value: public
+  SubnetBPrivate:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Select [ 4, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'ECS Private subnet B'
+      - Key: Reach
+        Value: private
+  SubnetCPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs '']
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'ECS Public subnet C'
+      - Key: Reach
+        Value: public
+  SubnetCPrivate:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs '']
+      CidrBlock: !Select [ 5, !Cidr [ !GetAtt VPC.CidrBlock, 6, 8 ]]
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'ECS Private subnet C'
+      - Key: Reach
+        Value: private
+# NestedStackRoute:
+  # Type: 'AWS::CloudFormation::Stack'
+  # DeletionPolicy: Retain
+  # Preperties:
+     # TemplateURL: >-
+# NestedStackACL:
+  # Type: 'AWS::CloudFormation::Stack'
+  # DeletionPolicy: Retain
+  # Preperties:
+     # TemplateURL: >-
+Outputs:
+  TemplateID:
+    Description: 'template id'
+    Value: 'vpc'
+  TemplateVersion:
+    Description: 'template version.'
+    Value: '0.1.1'
+  StackName:
+    Description: 'Stack name.'
+    Value: !Sub '${AWS::StackName}'
+  AZs: # Better name would be NumberOfAZs, but we keep the name for backward compatibility
+    Description: 'Number of AZs'
+    Value: 3
+    Export:
+      Name: !Sub '${AWS::StackName}-AZs'
+  AZList:  # Better name would be AZs, but the name was already used
+    Description: 'List of AZs'
+    Value: !Join [',', [!Select [0, !GetAZs ''], !Select [1, !GetAZs ''], !Select [2, !GetAZs '']]]
+    Export:
+      Name: !Sub '${AWS::StackName}-AZList'
+  AZA:
+    Description: 'AZ of A'
+    Value: !Select [0, !GetAZs '']
+    Export:
+      Name: !Sub '${AWS::StackName}-AZA'
+  AZB:
+    Description: 'AZ of B'
+    Value: !Select [1, !GetAZs '']
+    Export:
+      Name: !Sub '${AWS::StackName}-AZB'
+  AZC:
+    Description: 'AZ of C'
+    Value: !Select [2, !GetAZs '']
+    Export:
+      Name: !Sub '${AWS::StackName}-AZC'
+  CidrBlock:
+    Description: 'The set of IP addresses for the VPC.'
+    Value: !GetAtt 'VPC.CidrBlock'
+    Export:
+      Name: !Sub '${AWS::StackName}-CidrBlock'
+  VPC:
+    Description: 'VPC.'
+    Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VPC'
+  InternetGateway:
+    Description: 'InternetGateway.'
+    Value: !Ref InternetGateway
+    Export:
+      Name: !Sub '${AWS::StackName}-InternetGateway'
+  NatEipAllocationId:
+    Description: 'Nat EIP Allocation Id'
+    Value:
+      Fn::GetAtt:
+        - NatEip
+        - AllocationId
+  NatGateway:
+    Description: 'NatGateway.'
+    Value: !Ref NatGateway
+    Export:
+      Name: !Sub '${AWS::StackName}-NatGateway'
+  SubnetsPublic:
+    Description: 'Subnets public.'
+    Value: !Join [',', [!Ref SubnetAPublic, !Ref SubnetBPublic, !Ref SubnetCPublic]]
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetsPublic'
+  SubnetsPrivate:
+    Description: 'Subnets private.'
+    Value: !Join [',', [!Ref SubnetAPrivate, !Ref SubnetBPrivate, !Ref SubnetCPrivate]]
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetsPrivate'
+  SubnetAPublic:
+    Description: 'Subnet A public.'
+    Value: !Ref SubnetAPublic
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetAPublic'
+  SubnetAPrivate:
+    Description: 'Subnet A private.'
+    Value: !Ref SubnetAPrivate
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetAPrivate'
+  SubnetBPublic:
+    Description: 'Subnet B public.'
+    Value: !Ref SubnetBPublic
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetBPublic'
+  SubnetBPrivate:
+    Description: 'Subnet B private.'
+    Value: !Ref SubnetBPrivate
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetBPrivate'
+  SubnetCPublic:
+    Description: 'Subnet C public.'
+    Value: !Ref SubnetCPublic
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetCPublic'
+  SubnetCPrivate:
+    Description: 'Subnet C private.'
+    Value: !Ref SubnetCPrivate
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetCPrivate'

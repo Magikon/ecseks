@@ -1,0 +1,87 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VPC: template route'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'VPC Parameters for Routes'
+Resources:
+  RouteTablePublic: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'Route Table Public'
+  RouteTablePrivate: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'Route Table Private'
+  RouteTableAssociationAPublic:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetAPublic
+      RouteTableId: !Ref RouteTablePublic
+  RouteTableAssociationAPrivate:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetAPrivate
+      RouteTableId: !Ref RouteTablePrivate
+  RouteTableAssociationBPublic:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetBPublic
+      RouteTableId: !Ref RouteTablePublic
+  RouteTableAssociationBPrivate:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetBPrivate
+      RouteTableId: !Ref RouteTablePrivate
+  RouteTableAssociationCPublic:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetCPublic
+      RouteTableId: !Ref RouteTablePublic
+  RouteTableAssociationCPrivate:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetCPrivate
+      RouteTableId: !Ref RouteTablePrivate
+  RouteTablePublicInternetRoute: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+  RouteTablePrivateInternetRoute: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: NatGateway
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGateway
+Outputs:
+  TemplateID:
+    Description: 'template id'
+    Value: 'vpc_routes'
+  TemplateVersion:
+    Description: 'template version.'
+    Value: '0.1.1'
+  StackName:
+    Description: 'Stack name.'
+    Value: !Sub '${AWS::StackName}'
+  RouteTablesPrivate:
+    Description: 'Route tables private.'
+    Value: !Ref RouteTablePrivate
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTablesPrivate'
+  RouteTablesPublic:
+    Description: 'Route tables public.'
+    Value: !Ref RouteTablePublic
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTablesPublic'

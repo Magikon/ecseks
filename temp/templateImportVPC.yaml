@@ -1,0 +1,12 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VPC Import: template'
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    DeletionPolicy: "Retain"
+    Properties:
+      CidrBlock: "172.31.0.0/16"
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
