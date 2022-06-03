@@ -67,7 +67,7 @@ Parameters:
   LoadBalancerPath:
     Description: 'Optional path part of the path pattern. E.g., for service, the path pattern will be /service/*.  Specify LoadBalancerPath and/or LoadBalancerHostPattern.'
     Type: String
-    Default: 'service'
+    Default: '/*'
     ConstraintDescription: 'Must not be longer than 255'
     MaxLength: 255
   LoadBalancerHttps:
@@ -87,6 +87,7 @@ Parameters:
   Image:
     Description: 'The image to use for a container, which is passed directly to the Docker daemon. You can use images in the Docker Hub registry or specify other repositories (repository-url/image:tag).'
     Type: String
+    Default: nginx
   DesiredCount:
     Description: 'The number of simultaneous tasks, that you want to run on the cluster.'
     Type: Number
@@ -191,46 +192,46 @@ Resources:
       TargetGroupAttributes:
       - Key: deregistration_delay.timeout_seconds
         Value: !Ref LoadBalancerDeregistrationDelay
-  HTTPCodeTarget5XXTooHighAlarm:
-    Condition: HasAlertTopic
-    Type: 'AWS::CloudWatch::Alarm'
-    Properties:
-      AlarmDescription: 'Application load balancer receives 5XX HTTP status codes from targets'
-      Namespace: 'AWS/ApplicationELB'
-      MetricName: HTTPCode_Target_5XX_Count
-      Statistic: Sum
-      Period: 60
-      EvaluationPeriods: 1
-      ComparisonOperator: GreaterThanThreshold
-      Threshold: 0
-      AlarmActions:
-      - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      Dimensions:
-      - Name: LoadBalancer
-        Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-LoadBalancerFullName'}
-      - Name: TargetGroup
-        Value: !GetAtt LoadBalancerTargetGroup.TargetGroupFullName
-      TreatMissingData: notBreaching
-  TargetConnectionErrorCountTooHighAlarm:
-    Condition: HasAlertTopic
-    Type: 'AWS::CloudWatch::Alarm'
-    Properties:
-      AlarmDescription: 'Application load balancer could not connect to targets'
-      Namespace: 'AWS/ApplicationELB'
-      MetricName: TargetConnectionErrorCount
-      Statistic: Sum
-      Period: 60
-      EvaluationPeriods: 1
-      ComparisonOperator: GreaterThanThreshold
-      Threshold: 0
-      AlarmActions:
-      - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      Dimensions:
-      - Name: LoadBalancer
-        Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-LoadBalancerFullName'}
-      - Name: TargetGroup
-        Value: !GetAtt LoadBalancerTargetGroup.TargetGroupFullName
-      TreatMissingData: notBreaching
+  # HTTPCodeTarget5XXTooHighAlarm:
+    # Condition: HasAlertTopic
+    # Type: 'AWS::CloudWatch::Alarm'
+    # Properties:
+      # AlarmDescription: 'Application load balancer receives 5XX HTTP status codes from targets'
+      # Namespace: 'AWS/ApplicationELB'
+      # MetricName: HTTPCode_Target_5XX_Count
+      # Statistic: Sum
+      # Period: 60
+      # EvaluationPeriods: 1
+      # ComparisonOperator: GreaterThanThreshold
+      # Threshold: 0
+      # AlarmActions:
+      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
+      # Dimensions:
+      # - Name: LoadBalancer
+        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-LoadBalancerFullName'}
+      # - Name: TargetGroup
+        # Value: !GetAtt LoadBalancerTargetGroup.TargetGroupFullName
+      # TreatMissingData: notBreaching
+  # TargetConnectionErrorCountTooHighAlarm:
+    # Condition: HasAlertTopic
+    # Type: 'AWS::CloudWatch::Alarm'
+    # Properties:
+      # AlarmDescription: 'Application load balancer could not connect to targets'
+      # Namespace: 'AWS/ApplicationELB'
+      # MetricName: TargetConnectionErrorCount
+      # Statistic: Sum
+      # Period: 60
+      # EvaluationPeriods: 1
+      # ComparisonOperator: GreaterThanThreshold
+      # Threshold: 0
+      # AlarmActions:
+      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
+      # Dimensions:
+      # - Name: LoadBalancer
+        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-LoadBalancerFullName'}
+      # - Name: TargetGroup
+        # Value: !GetAtt LoadBalancerTargetGroup.TargetGroupFullName
+      # TreatMissingData: notBreaching
   LoadBalancerHttpListenerRule:
     Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
     Properties:
@@ -246,10 +247,10 @@ Resources:
             - !Ref LoadBalancerHostPattern
           - Field: path-pattern
             Values:
-            - !Sub '/${LoadBalancerPath}/*'
+            - !Sub '${LoadBalancerPath}'
         - - Field: path-pattern
             Values:
-            - !Sub '/${LoadBalancerPath}/*'
+            - !Sub '${LoadBalancerPath}'
       - !If
         - HasLoadBalancerHostPattern
         - - Field: host-header
@@ -322,44 +323,44 @@ Resources:
         Field: instanceId
       Role: !GetAtt 'ServiceRole.Arn'
       TaskDefinition: !Ref TaskDefinition
-  CPUUtilizationTooHighAlarm:
-    Condition: HasAlertTopic
-    Type: 'AWS::CloudWatch::Alarm'
-    Properties:
-      AlarmDescription: 'Average CPU utilization over last 10 minutes higher than 80%'
-      Namespace: 'AWS/ECS'
-      Dimensions:
-      - Name: ClusterName
-        Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-Cluster'}
-      - Name: ServiceName
-        Value: !GetAtt 'Service.Name'
-      MetricName: CPUUtilization
-      ComparisonOperator: GreaterThanThreshold
-      Statistic: Average
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 80
-      AlarmActions:
-      - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-  ServiceFailedNotification:
-    Condition: HasAlertTopic
-    Type: 'AWS::Events::Rule'
-    Properties:
-      EventPattern:
-        source:
-        - 'aws.ecs'
-        'detail-type':
-        - 'ECS Service Action'
-        resources:
-        - !Ref Service
-        detail:
-          eventType:
-          - ERROR
-          - WARN
-      State: ENABLED
-      Targets:
-      - Arn: {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-        Id: rule
+  # CPUUtilizationTooHighAlarm:
+    # Condition: HasAlertTopic
+    # Type: 'AWS::CloudWatch::Alarm'
+    # Properties:
+      # AlarmDescription: 'Average CPU utilization over last 10 minutes higher than 80%'
+      # Namespace: 'AWS/ECS'
+      # Dimensions:
+      # - Name: ClusterName
+        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-Cluster'}
+      # - Name: ServiceName
+        # Value: !GetAtt 'Service.Name'
+      # MetricName: CPUUtilization
+      # ComparisonOperator: GreaterThanThreshold
+      # Statistic: Average
+      # Period: 300
+      # EvaluationPeriods: 1
+      # Threshold: 80
+      # AlarmActions:
+      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
+  # ServiceFailedNotification:
+    # Condition: HasAlertTopic
+    # Type: 'AWS::Events::Rule'
+    # Properties:
+      # EventPattern:
+        # source:
+        # - 'aws.ecs'
+        # 'detail-type':
+        # - 'ECS Service Action'
+        # resources:
+        # - !Ref Service
+        # detail:
+          # eventType:
+          # - ERROR
+          # - WARN
+      # State: ENABLED
+      # Targets:
+      # - Arn: {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
+        # Id: rule
   ScalableTargetRole: # based on http://docs.aws.amazon.com/AmazonECS/latest/developerguide/autoscale_IAM_role.html
     Condition: HasAutoScaling
     Type: 'AWS::IAM::Role'
@@ -431,44 +432,44 @@ Resources:
         StepAdjustments:
         - MetricIntervalUpperBound: 0
           ScalingAdjustment: -25
-  CPUUtilizationHighAlarm:
-    Condition: HasAutoScaling
-    Type: 'AWS::CloudWatch::Alarm'
-    Properties:
-      AlarmDescription: 'Service is running out of CPU'
-      Namespace: 'AWS/ECS'
-      Dimensions:
-      - Name: ClusterName
-        Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-Cluster'}
-      - Name: ServiceName
-        Value: !GetAtt 'Service.Name'
-      MetricName: CPUUtilization
-      ComparisonOperator: GreaterThanThreshold
-      Statistic: Average
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 60
-      AlarmActions:
-      - !Ref ScaleUpPolicy
-  CPUUtilizationLowAlarm:
-    Condition: HasAutoScaling
-    Type: 'AWS::CloudWatch::Alarm'
-    Properties:
-      AlarmDescription: 'Service is wasting CPU'
-      Namespace: 'AWS/ECS'
-      Dimensions:
-      - Name: ClusterName
-        Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-Cluster'}
-      - Name: ServiceName
-        Value: !GetAtt 'Service.Name'
-      MetricName: CPUUtilization
-      ComparisonOperator: LessThanThreshold
-      Statistic: Average
-      Period: 300
-      EvaluationPeriods: 3
-      Threshold: 30
-      AlarmActions:
-      - !Ref ScaleDownPolicy
+  # CPUUtilizationHighAlarm:
+    # Condition: HasAutoScaling
+    # Type: 'AWS::CloudWatch::Alarm'
+    # Properties:
+      # AlarmDescription: 'Service is running out of CPU'
+      # Namespace: 'AWS/ECS'
+      # Dimensions:
+      # - Name: ClusterName
+        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-Cluster'}
+      # - Name: ServiceName
+        # Value: !GetAtt 'Service.Name'
+      # MetricName: CPUUtilization
+      # ComparisonOperator: GreaterThanThreshold
+      # Statistic: Average
+      # Period: 300
+      # EvaluationPeriods: 1
+      # Threshold: 60
+      # AlarmActions:
+      # - !Ref ScaleUpPolicy
+  # CPUUtilizationLowAlarm:
+    # Condition: HasAutoScaling
+    # Type: 'AWS::CloudWatch::Alarm'
+    # Properties:
+      # AlarmDescription: 'Service is wasting CPU'
+      # Namespace: 'AWS/ECS'
+      # Dimensions:
+      # - Name: ClusterName
+        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-Cluster'}
+      # - Name: ServiceName
+        # Value: !GetAtt 'Service.Name'
+      # MetricName: CPUUtilization
+      # ComparisonOperator: LessThanThreshold
+      # Statistic: Average
+      # Period: 300
+      # EvaluationPeriods: 3
+      # Threshold: 30
+      # AlarmActions:
+      # - !Ref ScaleDownPolicy
 Outputs:
   TemplateID:
     Description: 'cloudonaut.io template id.'
@@ -487,7 +488,7 @@ Outputs:
   URL:
     Description: 'URL to the ECS service.' # TODO does not work with LoadBalancerHostPattern
     Value: !Sub
-    - '${ClusterURL}/${LoadBalancerPath}/'
+    - '${ClusterURL}${LoadBalancerPath}'
     - ClusterURL: {'Fn::ImportValue': !Sub '${ParentClusterStack}-URL'}
       LoadBalancerPath: !Ref LoadBalancerPath
     Export:

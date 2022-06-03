@@ -7,7 +7,7 @@ Metadata:
     - Label:
         default: 'VPC Parameters'
       Parameters:
-      - Name
+      - ClusterName
       - VPC
       - SubnetsPrivate
       - SubnetsPublic
@@ -35,12 +35,12 @@ Metadata:
       - MinSize
       - DrainingTimeoutInSeconds
       - StopContainerTimeoutInSeconds
-    - Label:
-        default: 'Permission Parameters'
-      Parameters:
-      - PermissionsBoundary
+    # - Label:
+        # default: 'Permission Parameters'
+      # Parameters:
+      # - PermissionsBoundary
 Parameters:
-  Name:
+  ClusterName:
     Type: String
   VPC:
     Type: AWS::EC2::VPC::Id
@@ -50,10 +50,10 @@ Parameters:
     Type: List<AWS::EC2::Subnet::Id>
   SecurityGroups:
     Type: AWS::EC2::SecurityGroup::Id
-  PermissionsBoundary:
-    Description: 'Optional ARN for a policy that will be used as the permission boundary for all roles created by this template.'
-    Type: String
-    Default: ''
+  # PermissionsBoundary:
+    # Description: 'Optional ARN for a policy that will be used as the permission boundary for all roles created by this template.'
+    # Type: String
+    # Default: ''
   KeyName:
     Description: 'Optional key pair of the ec2-user to establish a SSH connection to the EC2 instances of the ECS cluster.'
     Type: String
@@ -182,7 +182,7 @@ Mappings:
     'us-west-2':
       ECSAMI: 'ami-0e0e34cdb5fd714fc'
 Conditions:
-  HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundary, '']]
+  # HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundary, '']]
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
   HasIAMUserSSHAccess: !Equals [!Ref IAMUserSSHAccess, 'true']
   HasSystemsManagerAccess: !Equals [!Ref SystemsManagerAccess, 'true']
@@ -193,7 +193,7 @@ Resources:
   Cluster:
     Type: 'AWS::ECS::Cluster'
     Properties: 
-      ClusterName: !Sub ${Name}
+      ClusterName: !Ref ClusterName
   LogGroup:
     Type: 'AWS::Logs::LogGroup'
     Properties:
@@ -777,23 +777,23 @@ Resources:
             yum install -y aws-cfn-bootstrap
             /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchTemplate --region ${AWS::Region}
             /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource AutoScalingGroup --region ${AWS::Region}
-  # AutoScalingGroup:
-    # Type: 'AWS::AutoScaling::AutoScalingGroup'
-    # Properties:
-      # LaunchTemplate:
-        # LaunchTemplateId: !Ref LaunchTemplate
-        # Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'
-      # MinSize: !Ref MinSize
-      # MaxSize: !Ref MaxSize
-      # Cooldown: '600'
-      # HealthCheckGracePeriod: 900 # needs to be in sync with CreationPolicy/UpdatePolicy timeout
-      # HealthCheckType: ELB
-      # TargetGroupARNs:
-      # - !Ref DefaultTargetGroup
-      # MetricsCollection:
-      # - Granularity: '1Minute'
-        # Metrics:
-        # - 'GroupDesiredCapacity'
+  AutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      Cooldown: '600'
+      HealthCheckGracePeriod: 900 # needs to be in sync with CreationPolicy/UpdatePolicy timeout
+      HealthCheckType: ELB
+      TargetGroupARNs:
+      - !Ref DefaultTargetGroup
+      MetricsCollection:
+      - Granularity: '1Minute'
+        Metrics:
+        - 'GroupDesiredCapacity'
       # NotificationConfigurations: !If
       # - HasAlertTopic
       # - - NotificationTypes:
@@ -802,23 +802,25 @@ Resources:
           # TopicARN: {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
       # - []
       # VPCZoneIdentifier: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-Subnets${SubnetsReach}'}]
-      # Tags:
-      # - Key: Name
-        # Value: 'ecs-cluster'
-        # PropagateAtLaunch: true
-    # CreationPolicy:
-      # ResourceSignal:
-        # Timeout: PT15M
-    # UpdatePolicy:
-      # AutoScalingRollingUpdate:
-        # PauseTime: PT15M
-        # SuspendProcesses:
-        # - HealthCheck
-        # - ReplaceUnhealthy
-        # - AZRebalance
-        # - AlarmNotification
-        # - ScheduledActions
-        # WaitOnResourceSignals: true
+      # VPCZoneIdentifier: !Join [',', [ !Join [ ",", [ !Ref SubnetsPrivate ] ], [ !Join [ ",", [ !Ref SubnetsPublic ] ]]
+      VPCZoneIdentifier: !Ref SubnetsPrivate
+      Tags:
+      - Key: Name
+        Value: 'ecs-cluster'
+        PropagateAtLaunch: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        PauseTime: PT15M
+        SuspendProcesses:
+        - HealthCheck
+        - ReplaceUnhealthy
+        - AZRebalance
+        - AlarmNotification
+        - ScheduledActions
+        WaitOnResourceSignals: true
   # CPUTooHighAlarm:
     # Condition: HasAlertTopic
     # Type: 'AWS::CloudWatch::Alarm'
@@ -836,14 +838,14 @@ Resources:
       # Dimensions:
       # - Name: AutoScalingGroupName
         # Value: !Ref AutoScalingGroup
-  # AutoScalingGroupLifecycleHookQueue:
-    # Type: 'AWS::SQS::Queue'
-    # Properties:
-      # QueueName: !Sub '${AWS::StackName}-lifecycle-hook'
-      # VisibilityTimeout: 60
-      # RedrivePolicy:
-        # deadLetterTargetArn: !GetAtt 'AutoScalingGroupLifecycleHookDeadLetterQueue.Arn'
-        # maxReceiveCount: 5
+  AutoScalingGroupLifecycleHookQueue:
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-lifecycle-hook'
+      VisibilityTimeout: 60
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt 'AutoScalingGroupLifecycleHookDeadLetterQueue.Arn'
+        maxReceiveCount: 5
   # AutoScalingGroupLifecycleHookQueueTooHighAlarm:
     # Condition: HasAlertTopic
     # Type: 'AWS::CloudWatch::Alarm'
@@ -862,10 +864,10 @@ Resources:
       # - Name: QueueName
         # Value: !GetAtt 'AutoScalingGroupLifecycleHookQueue.QueueName'
       # TreatMissingData: notBreaching
-  # AutoScalingGroupLifecycleHookDeadLetterQueue:
-    # Type: 'AWS::SQS::Queue'
-    # Properties:
-      # QueueName: !Sub '${AWS::StackName}-lifecycle-hook-dlq'
+  AutoScalingGroupLifecycleHookDeadLetterQueue:
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-lifecycle-hook-dlq'
   # AutoScalingGroupLifecycleHookDeadLetterQueueTooHighAlarm:
     # Condition: HasAlertTopic
     # Type: 'AWS::CloudWatch::Alarm'
@@ -884,77 +886,77 @@ Resources:
       # - Name: QueueName
         # Value: !GetAtt 'AutoScalingGroupLifecycleHookDeadLetterQueue.QueueName'
       # TreatMissingData: notBreaching
-  # AutoScalingGroupLifecycleHookIAMRole:
-    # Type: 'AWS::IAM::Role'
-    # Properties:
-      # AssumeRolePolicyDocument:
-        # Version: '2012-10-17'
-        # Statement:
-        # - Effect: Allow
-          # Principal:
-            # Service: 'autoscaling.amazonaws.com'
-          # Action: 'sts:AssumeRole'
-      # PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundary, !Ref 'AWS::NoValue']
-      # Policies:
-      # - PolicyName: sqs
-        # PolicyDocument:
-          # Version: '2012-10-17'
-          # Statement:
-          # - Sid: write
-            # Effect: Allow
-            # Action:
-            # - 'sqs:SendMessage'
-            # - 'sqs:GetQueueUrl'
-            # Resource: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
-  # AutoScalingGroupTerminatingLifecycleHook:
-    # Type: 'AWS::AutoScaling::LifecycleHook'
-    # Properties:
-      # HeartbeatTimeout: 600
-      # DefaultResult: CONTINUE
-      # AutoScalingGroupName: !Ref AutoScalingGroup
-      # LifecycleTransition: 'autoscaling:EC2_INSTANCE_TERMINATING'
-      # NotificationTargetARN: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
-      # RoleARN: !GetAtt 'AutoScalingGroupLifecycleHookIAMRole.Arn'
-  # ScaleUpPolicy:
-    # Type: 'AWS::AutoScaling::ScalingPolicy'
-    # Properties:
-      # AutoScalingGroupName: !Ref AutoScalingGroup
-      # PolicyType: StepScaling
-      # AdjustmentType: ChangeInCapacity
-      # EstimatedInstanceWarmup: 10
-      # StepAdjustments:
-      # - MetricIntervalUpperBound: 0.0
-        # ScalingAdjustment: 1
-  # ScaleDownPolicy:
-    # Type: 'AWS::AutoScaling::ScalingPolicy'
-    # Properties:
-      # AutoScalingGroupName: !Ref AutoScalingGroup
-      # PolicyType: StepScaling
-      # AdjustmentType: ChangeInCapacity
-      # EstimatedInstanceWarmup: 10
-      # StepAdjustments:
-      # - MetricIntervalLowerBound: 0.0
-        # ScalingAdjustment: -1
-  # NotEnoughClusterCapacityRule:
-    # Type: 'AWS::Events::Rule'
-    # Properties:
-      # Description: 'Not enough resources to place service task. Scale up cluster.'
-      # EventPattern:
-        # source:
-        # - 'aws.ecs'
-        # 'detail-type':
-        # - 'ECS Service Action'
-        # detail:
-          # eventType:
-          # - 'ERROR'
-          # eventName:
-          # - 'SERVICE_TASK_PLACEMENT_FAILURE'
-          # clusterArn:
-          # - !GetAtt 'Cluster.Arn'
-      # State: ENABLED
-      # Targets:
-      # - Arn: !GetAtt 'ScaleUpLambda.Arn'
-        # Id: lambda
+  AutoScalingGroupLifecycleHookIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'autoscaling.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      PermissionsBoundary:  !Ref 'AWS::NoValue'
+      Policies:
+      - PolicyName: sqs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Sid: write
+            Effect: Allow
+            Action:
+            - 'sqs:SendMessage'
+            - 'sqs:GetQueueUrl'
+            Resource: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
+  AutoScalingGroupTerminatingLifecycleHook:
+    Type: 'AWS::AutoScaling::LifecycleHook'
+    Properties:
+      HeartbeatTimeout: 600
+      DefaultResult: CONTINUE
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      LifecycleTransition: 'autoscaling:EC2_INSTANCE_TERMINATING'
+      NotificationTargetARN: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
+      RoleARN: !GetAtt 'AutoScalingGroupLifecycleHookIAMRole.Arn'
+  ScaleUpPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: StepScaling
+      AdjustmentType: ChangeInCapacity
+      EstimatedInstanceWarmup: 10
+      StepAdjustments:
+      - MetricIntervalUpperBound: 0.0
+        ScalingAdjustment: 1
+  ScaleDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: StepScaling
+      AdjustmentType: ChangeInCapacity
+      EstimatedInstanceWarmup: 10
+      StepAdjustments:
+      - MetricIntervalLowerBound: 0.0
+        ScalingAdjustment: -1
+  NotEnoughClusterCapacityRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: 'Not enough resources to place service task. Scale up cluster.'
+      EventPattern:
+        source:
+        - 'aws.ecs'
+        'detail-type':
+        - 'ECS Service Action'
+        detail:
+          eventType:
+          - 'ERROR'
+          eventName:
+          - 'SERVICE_TASK_PLACEMENT_FAILURE'
+          clusterArn:
+          - !GetAtt 'Cluster.Arn'
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt 'ScaleUpLambda.Arn'
+        Id: lambda
   # ContainerInstancesExcessAlarm:
     # Type: 'AWS::CloudWatch::Alarm'
     # Properties:
@@ -1075,71 +1077,71 @@ Resources:
       # Threshold: 80
       # AlarmActions:
       # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-  # ScaleUpLambdaRole:
-    # Type: 'AWS::IAM::Role'
-    # Properties:
-      # AssumeRolePolicyDocument:
-        # Version: '2012-10-17'
-        # Statement:
-        # - Effect: Allow
-          # Principal:
-            # Service: 'lambda.amazonaws.com'
-          # Action: 'sts:AssumeRole'
-      # PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundary, !Ref 'AWS::NoValue']
-      # Policies:
-      # - PolicyName: autoscaling
-        # PolicyDocument:
-          # Statement:
-          # - Effect: Allow
-            # Action: 'autoscaling:ExecutePolicy'
-            # Resource: '*' # CloudFormation does not provide a way to access the ASG ID but ARN requires ASG ID.
-  # ScaleUpLambdaPolicy:
-    # Type: 'AWS::IAM::Policy'
-    # Properties:
-      # Roles:
-      # - !Ref ScaleUpLambdaRole
-      # PolicyName: lambda
-      # PolicyDocument:
-        # Statement:
-        # - Effect: Allow
-          # Action:
-          # - 'logs:CreateLogStream'
-          # - 'logs:PutLogEvents'
-          # Resource: !GetAtt 'ScaleUpLogGroup.Arn'
-  # ScaleUpLambdaPermission:
-    # Type: 'AWS::Lambda::Permission'
-    # Properties:
-      # Action: 'lambda:InvokeFunction'
-      # FunctionName: !Ref ScaleUpLambda
-      # Principal: 'events.amazonaws.com'
-      # SourceArn: !GetAtt 'NotEnoughClusterCapacityRule.Arn'
-  # ScaleUpLambda:
-    # Type: 'AWS::Lambda::Function'
-    # Properties:
-      # Code:
-        # ZipFile: |
-          # 'use strict';
-          # const AWS = require('aws-sdk');
-          # const autoscaling = new AWS.AutoScaling({apiVersion: '2011-01-01'});
-          # const sp = process.env.SCALING_POLICY_NAME;
-          # exports.handler = async function(event, context) {
-            # console.log(`Invoke: ${!JSON.stringify(event)}`);
-            # const res = await autoscaling.executePolicy({PolicyName: sp, HonorCooldown: false, MetricValue: -1.0, BreachThreshold: -1.0}).promise();
-            # console.log('Executed scaling policy', res);
-          # }
-      # Handler: 'index.handler'
-      # MemorySize: 128
-      # Role: !GetAtt 'ScaleUpLambdaRole.Arn'
-      # Runtime: 'nodejs12.x'
-      # Timeout: 60
-      # Environment:
-        # Variables:
-          # SCALING_POLICY_NAME: !Ref ScaleUpPolicy
-  # ScaleUpLogGroup:
-    # Type: 'AWS::Logs::LogGroup'
-    # Properties:
-      # LogGroupName: !Sub '/aws/lambda/${ScaleUpLambda}'
-      # RetentionInDays: !Ref LogsRetentionInDays
+  ScaleUpLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'lambda.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      PermissionsBoundary: !Ref 'AWS::NoValue'
+      Policies:
+      - PolicyName: autoscaling
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: 'autoscaling:ExecutePolicy'
+            Resource: '*' # CloudFormation does not provide a way to access the ASG ID but ARN requires ASG ID.
+  ScaleUpLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      Roles:
+      - !Ref ScaleUpLambdaRole
+      PolicyName: lambda
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action:
+          - 'logs:CreateLogStream'
+          - 'logs:PutLogEvents'
+          Resource: !GetAtt 'ScaleUpLogGroup.Arn'
+  ScaleUpLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref ScaleUpLambda
+      Principal: 'events.amazonaws.com'
+      SourceArn: !GetAtt 'NotEnoughClusterCapacityRule.Arn'
+  ScaleUpLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile: |
+          'use strict';
+          const AWS = require('aws-sdk');
+          const autoscaling = new AWS.AutoScaling({apiVersion: '2011-01-01'});
+          const sp = process.env.SCALING_POLICY_NAME;
+          exports.handler = async function(event, context) {
+            console.log(`Invoke: ${!JSON.stringify(event)}`);
+            const res = await autoscaling.executePolicy({PolicyName: sp, HonorCooldown: false, MetricValue: -1.0, BreachThreshold: -1.0}).promise();
+            console.log('Executed scaling policy', res);
+          }
+      Handler: 'index.handler'
+      MemorySize: 128
+      Role: !GetAtt 'ScaleUpLambdaRole.Arn'
+      Runtime: 'nodejs12.x'
+      Timeout: 60
+      Environment:
+        Variables:
+          SCALING_POLICY_NAME: !Ref ScaleUpPolicy
+  ScaleUpLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ScaleUpLambda}'
+      RetentionInDays: !Ref LogsRetentionInDays
   # ScaleUpLambdaErrorsTooHighAlarm:
     # Condition: HasAlertTopic
     # Type: 'AWS::CloudWatch::Alarm'
@@ -1176,173 +1178,173 @@ Resources:
       # - Name: FunctionName
         # Value: !Ref ScaleUpLambda
       # TreatMissingData: notBreaching
-  # DrainInstanceLambdaRole:
-    # Type: 'AWS::IAM::Role'
-    # Properties:
-      # AssumeRolePolicyDocument:
-        # Version: '2012-10-17'
-        # Statement:
-        # - Effect: Allow
-          # Principal:
-            # Service: 'lambda.amazonaws.com'
-          # Action: 'sts:AssumeRole'
-      # PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundary, !Ref 'AWS::NoValue']
-      # Policies:
-      # - PolicyName: draininstance
-        # PolicyDocument:
-          # Statement:
-          # - Effect: Allow
-            # Action:
-            # - 'sqs:DeleteMessage'
-            # - 'sqs:ReceiveMessage'
-            # - 'sqs:SendMessage'
-            # - 'sqs:GetQueueAttributes'
-            # Resource: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
-          # - Effect: Allow
-            # Action:
-            # - 'ecs:ListContainerInstances'
-            # Resource: !GetAtt 'Cluster.Arn'
-          # - Effect: Allow
-            # Action:
-            # - 'ecs:updateContainerInstancesState'
-            # - 'ecs:listTasks'
-            # Resource: '*'
-            # Condition:
-              # StringEquals:
-                # 'ecs:cluster': !GetAtt 'Cluster.Arn'
-          # - Effect: Allow
-            # Action:
-            # - 'autoscaling:CompleteLifecycleAction'
-            # - 'autoscaling:RecordLifecycleActionHeartbeat'
-            # Resource: !Sub 'arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AutoScalingGroup}'
-  # DrainInstanceLambdaPolicy:
-    # Type: 'AWS::IAM::Policy'
-    # Properties:
-      # Roles:
-      # - !Ref DrainInstanceLambdaRole
-      # PolicyName: lambda
-      # PolicyDocument:
-        # Statement:
-        # - Effect: Allow
-          # Action:
-          # - 'logs:CreateLogStream'
-          # - 'logs:PutLogEvents'
-          # Resource: !GetAtt 'DrainInstanceLogGroup.Arn'
-  # DrainInstanceEventSourceMapping:
-    # DependsOn:
-    # - DrainInstanceLambdaPolicy
-    # - DrainInstanceLogGroup
-    # Type: 'AWS::Lambda::EventSourceMapping'
-    # Properties:
-      # BatchSize: 1
-      # Enabled: true
-      # EventSourceArn: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
-      # FunctionName: !GetAtt DrainInstanceLambda.Arn
-  # DrainInstanceLambda:
-    # Type: 'AWS::Lambda::Function'
-    # Properties:
-      # Code:
-        # ZipFile: |
-          # 'use strict';
-          # const AWS = require('aws-sdk');
-          # const ecs = new AWS.ECS({apiVersion: '2014-11-13'});
-          # const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
-          # const asg = new AWS.AutoScaling({apiVersion: '2011-01-01'});
-          # const cluster = process.env.CLUSTER;
-          # const queueUrl = process.env.QUEUE_URL;
-          # const drainingTimeout = process.env.DRAINING_TIMEOUT;
-          # async function getContainerInstanceArn(ec2InstanceId) {
-            # console.log(`getContainerInstanceArn(${[...arguments].join(', ')})`);
-            # const listResult = await ecs.listContainerInstances({cluster: cluster, filter: `ec2InstanceId == '${ec2InstanceId}'`}).promise();
-            # return listResult.containerInstanceArns[0];
-          # }
-          # async function drainInstance(ciArn) {
-            # console.log(`drainInstance(${[...arguments].join(', ')})`);
-            # await ecs.updateContainerInstancesState({cluster: cluster, containerInstances: [ciArn], status: 'DRAINING'}).promise();
-          # }
-          # async function wait(ciArn, asgName, lchName, lcaToken, terminateTime) {
-            # console.log(`wait(${[...arguments].join(', ')})`);
-            # const payload = {
-              # Service: 'DrainInstance',
-              # Event: 'custom:DRAIN_WAIT',
-              # ContainerInstanceArn: ciArn,
-              # AutoScalingGroupName: asgName,
-              # LifecycleHookName: lchName,
-              # LifecycleActionToken: lcaToken,
-              # TerminateTime: terminateTime
-            # };
-            # await sqs.sendMessage({
-              # QueueUrl: queueUrl,
-              # DelaySeconds: 60,
-              # MessageBody: JSON.stringify(payload)
-            # }).promise();
-          # }
-          # async function countTasks(ciArn) {
-            # console.log(`countTasks(${[...arguments].join(', ')})`);
-            # const listResult = await ecs.listTasks({cluster: cluster, containerInstance: ciArn}).promise();
-            # return listResult.taskArns.length;
-          # }
-          # async function terminateInstance(asgName, lchName, lcaToken) {
-            # console.log(`terminateInstance(${[...arguments].join(', ')})`);
-            # await asg.completeLifecycleAction({
-              # AutoScalingGroupName: asgName,
-              # LifecycleHookName: lchName,
-              # LifecycleActionToken: lcaToken,
-              # LifecycleActionResult: 'CONTINUE'
-            # }).promise();
-          # }
-          # async function heartbeat(asgName, lchName, lcaToken) {
-            # console.log(`heartbeat(${[...arguments].join(', ')})`);
-            # await asg.recordLifecycleActionHeartbeat({
-              # AutoScalingGroupName: asgName,
-              # LifecycleHookName: lchName,
-              # LifecycleActionToken: lcaToken
-            # }).promise();
-          # }
-          # exports.handler = async function(event, context) {
-            # console.log(`Invoke: ${JSON.stringify(event)}`);
-            # const body = JSON.parse(event.Records[0].body); // batch size is 1
-            # if (body.Service === 'AWS Auto Scaling' && body.Event === 'autoscaling:TEST_NOTIFICATION') {
-              # console.log('Ignore autoscaling:TEST_NOTIFICATION')
-            # } else if (body.Service === 'AWS Auto Scaling' && body.LifecycleTransition === 'autoscaling:EC2_INSTANCE_TERMINATING') {
-              # const lcaToken = body.LifecycleActionToken;
-              # const ciArn = await getContainerInstanceArn(body.EC2InstanceId);
-              # await drainInstance(ciArn);
-              # await wait(ciArn, body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken, body.Time);
-            # } else if (body.Service === 'DrainInstance' && body.Event === 'custom:DRAIN_WAIT') {
-              # const taskCount = await countTasks(body.ContainerInstanceArn);
-              # if (taskCount === 0) {
-                # await terminateInstance(body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken);
-              # } else {
-                # const actionDuration = (Date.now() - new Date(body.TerminateTime).getTime()) / 1000;
-                # if (actionDuration < drainingTimeout) {
-                  # await heartbeat(body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken);
-                  # await wait(body.ContainerInstanceArn, body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken, body.TerminateTime);
-                # } else {
-                  # console.log('Timeout for instance termination reached.');
-                  # await terminateInstance(body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken);
-                # }
-              # }
-            # } else {
-              # console.log('Ignore unxpected event');
-            # }
-          # };
-      # Handler: 'index.handler'
-      # MemorySize: 128
-      # Role: !GetAtt 'DrainInstanceLambdaRole.Arn'
-      # Runtime: 'nodejs12.x'
-      # Timeout: 30
-      # Environment:
-        # Variables:
-          # CLUSTER: !Ref Cluster
-          # QUEUE_URL: !Ref AutoScalingGroupLifecycleHookQueue
-          # DRAINING_TIMEOUT: !Ref DrainingTimeoutInSeconds
-      # ReservedConcurrentExecutions: 1
-  # DrainInstanceLogGroup:
-    # Type: 'AWS::Logs::LogGroup'
-    # Properties:
-      # LogGroupName: !Sub '/aws/lambda/${DrainInstanceLambda}'
-      # RetentionInDays: !Ref LogsRetentionInDays
+  DrainInstanceLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'lambda.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      PermissionsBoundary: !Ref 'AWS::NoValue'
+      Policies:
+      - PolicyName: draininstance
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'sqs:DeleteMessage'
+            - 'sqs:ReceiveMessage'
+            - 'sqs:SendMessage'
+            - 'sqs:GetQueueAttributes'
+            Resource: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
+          - Effect: Allow
+            Action:
+            - 'ecs:ListContainerInstances'
+            Resource: !GetAtt 'Cluster.Arn'
+          - Effect: Allow
+            Action:
+            - 'ecs:updateContainerInstancesState'
+            - 'ecs:listTasks'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'ecs:cluster': !GetAtt 'Cluster.Arn'
+          - Effect: Allow
+            Action:
+            - 'autoscaling:CompleteLifecycleAction'
+            - 'autoscaling:RecordLifecycleActionHeartbeat'
+            Resource: !Sub 'arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AutoScalingGroup}'
+  DrainInstanceLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      Roles:
+      - !Ref DrainInstanceLambdaRole
+      PolicyName: lambda
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action:
+          - 'logs:CreateLogStream'
+          - 'logs:PutLogEvents'
+          Resource: !GetAtt 'DrainInstanceLogGroup.Arn'
+  DrainInstanceEventSourceMapping:
+    DependsOn:
+    - DrainInstanceLambdaPolicy
+    - DrainInstanceLogGroup
+    Type: 'AWS::Lambda::EventSourceMapping'
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
+      FunctionName: !GetAtt DrainInstanceLambda.Arn
+  DrainInstanceLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile: |
+          'use strict';
+          const AWS = require('aws-sdk');
+          const ecs = new AWS.ECS({apiVersion: '2014-11-13'});
+          const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
+          const asg = new AWS.AutoScaling({apiVersion: '2011-01-01'});
+          const cluster = process.env.CLUSTER;
+          const queueUrl = process.env.QUEUE_URL;
+          const drainingTimeout = process.env.DRAINING_TIMEOUT;
+          async function getContainerInstanceArn(ec2InstanceId) {
+            console.log(`getContainerInstanceArn(${[...arguments].join(', ')})`);
+            const listResult = await ecs.listContainerInstances({cluster: cluster, filter: `ec2InstanceId == '${ec2InstanceId}'`}).promise();
+            return listResult.containerInstanceArns[0];
+          }
+          async function drainInstance(ciArn) {
+            console.log(`drainInstance(${[...arguments].join(', ')})`);
+            await ecs.updateContainerInstancesState({cluster: cluster, containerInstances: [ciArn], status: 'DRAINING'}).promise();
+          }
+          async function wait(ciArn, asgName, lchName, lcaToken, terminateTime) {
+            console.log(`wait(${[...arguments].join(', ')})`);
+            const payload = {
+              Service: 'DrainInstance',
+              Event: 'custom:DRAIN_WAIT',
+              ContainerInstanceArn: ciArn,
+              AutoScalingGroupName: asgName,
+              LifecycleHookName: lchName,
+              LifecycleActionToken: lcaToken,
+              TerminateTime: terminateTime
+            };
+            await sqs.sendMessage({
+              QueueUrl: queueUrl,
+              DelaySeconds: 60,
+              MessageBody: JSON.stringify(payload)
+            }).promise();
+          }
+          async function countTasks(ciArn) {
+            console.log(`countTasks(${[...arguments].join(', ')})`);
+            const listResult = await ecs.listTasks({cluster: cluster, containerInstance: ciArn}).promise();
+            return listResult.taskArns.length;
+          }
+          async function terminateInstance(asgName, lchName, lcaToken) {
+            console.log(`terminateInstance(${[...arguments].join(', ')})`);
+            await asg.completeLifecycleAction({
+              AutoScalingGroupName: asgName,
+              LifecycleHookName: lchName,
+              LifecycleActionToken: lcaToken,
+              LifecycleActionResult: 'CONTINUE'
+            }).promise();
+          }
+          async function heartbeat(asgName, lchName, lcaToken) {
+            console.log(`heartbeat(${[...arguments].join(', ')})`);
+            await asg.recordLifecycleActionHeartbeat({
+              AutoScalingGroupName: asgName,
+              LifecycleHookName: lchName,
+              LifecycleActionToken: lcaToken
+            }).promise();
+          }
+          exports.handler = async function(event, context) {
+            console.log(`Invoke: ${JSON.stringify(event)}`);
+            const body = JSON.parse(event.Records[0].body); // batch size is 1
+            if (body.Service === 'AWS Auto Scaling' && body.Event === 'autoscaling:TEST_NOTIFICATION') {
+              console.log('Ignore autoscaling:TEST_NOTIFICATION')
+            } else if (body.Service === 'AWS Auto Scaling' && body.LifecycleTransition === 'autoscaling:EC2_INSTANCE_TERMINATING') {
+              const lcaToken = body.LifecycleActionToken;
+              const ciArn = await getContainerInstanceArn(body.EC2InstanceId);
+              await drainInstance(ciArn);
+              await wait(ciArn, body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken, body.Time);
+            } else if (body.Service === 'DrainInstance' && body.Event === 'custom:DRAIN_WAIT') {
+              const taskCount = await countTasks(body.ContainerInstanceArn);
+              if (taskCount === 0) {
+                await terminateInstance(body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken);
+              } else {
+                const actionDuration = (Date.now() - new Date(body.TerminateTime).getTime()) / 1000;
+                if (actionDuration < drainingTimeout) {
+                  await heartbeat(body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken);
+                  await wait(body.ContainerInstanceArn, body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken, body.TerminateTime);
+                } else {
+                  console.log('Timeout for instance termination reached.');
+                  await terminateInstance(body.AutoScalingGroupName, body.LifecycleHookName, body.LifecycleActionToken);
+                }
+              }
+            } else {
+              console.log('Ignore unxpected event');
+            }
+          };
+      Handler: 'index.handler'
+      MemorySize: 128
+      Role: !GetAtt 'DrainInstanceLambdaRole.Arn'
+      Runtime: 'nodejs12.x'
+      Timeout: 30
+      Environment:
+        Variables:
+          CLUSTER: !Ref Cluster
+          QUEUE_URL: !Ref AutoScalingGroupLifecycleHookQueue
+          DRAINING_TIMEOUT: !Ref DrainingTimeoutInSeconds
+      ReservedConcurrentExecutions: 1
+  DrainInstanceLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${DrainInstanceLambda}'
+      RetentionInDays: !Ref LogsRetentionInDays
   # DrainInstanceLambdaErrorsTooHighAlarm:
     # Condition: HasAlertTopic
     # Type: 'AWS::CloudWatch::Alarm'
@@ -1417,3 +1419,8 @@ Outputs:
     Value: !Sub 'http://${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-URL'
+  VPC:
+    Description: 'VPC of ECS cluster.'
+    Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VPC'
