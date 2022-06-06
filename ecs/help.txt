@@ -1,0 +1,7 @@
+For testing purposes, you can create a Microsoft SQL Server RDS.
+Select in console
+Amazon RDS
+SQL Server Express Edition, choose the latest version offered
+In the Settings section, enter the database name, primary username, and password.
+Select instance class db.t3.small db, storege. Disable storage autoscaling.
+Select your VPC, create a new security group
