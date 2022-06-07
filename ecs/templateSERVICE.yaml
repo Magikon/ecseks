@@ -67,7 +67,7 @@ Parameters:
   LoadBalancerPath:
     Description: 'Optional path part of the path pattern. E.g., for service, the path pattern will be /service/*.  Specify LoadBalancerPath and/or LoadBalancerHostPattern.'
     Type: String
-    Default: '/v1/docs'
+    Default: '/*'
     ConstraintDescription: 'Must not be longer than 255'
     MaxLength: 255
   LoadBalancerHttps:
@@ -147,8 +147,13 @@ Resources:
           Statement:
           - Effect: Allow
             Action:
-            - 'secretsmanager:*'
-            Resource: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO'
+            - 'ssm:GetParameters'
+            - 'secretsmanager:GetSecretValue'
+            - 'kms:Decrypt'
+            Resource: 
+            - 'arn:aws:ssm:*:*:parameter/*'
+            - 'arn:aws:secretsmanager:*:*:secret:*'
+            - 'arn:aws:kms:*:*:key/*'
       - PolicyName: ecsTaskECR
         PolicyDocument:
           Version: '2012-10-17'
@@ -160,15 +165,15 @@ Resources:
             - 'ecr:BatchCheckLayerAvailability'
             - 'ecr:GetAuthorizationToken'
             Resource: '*'
-      - PolicyName: ecsTaskRDS
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - 'rds:*'
-            - 'rds-db:connect'
-            Resource: '*'
+      # - PolicyName: ecsTaskRDS
+        # PolicyDocument:
+          # Version: '2012-10-17'
+          # Statement:
+          # - Effect: Allow
+            # Action:
+            # - 'rds:*'
+            # - 'rds-db:connect'
+            # Resource: '*'
       - PolicyName: logs
         PolicyDocument:
           Version: '2012-10-17'
@@ -193,11 +198,23 @@ Resources:
         PortMappings:
         - ContainerPort: 80 # if you change this, you also must change the AWS::ECS::Service
           Protocol: tcp
-        Command:
-        - "/bin/sh -c printenv"
         Secrets: 
-        - Name: 'ZeroSecret'
-          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO'
+        - Name: 'ZC_DB__DATABASENAME'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__DATABASENAME::'
+        - Name: 'ZC_DB__PASSWORD'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__PASSWORD::'
+        - Name: 'ZC_DB__SERVERURL'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__SERVERURL::'
+        - Name: 'ZC_DB__USERNAME'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__USERNAME::'
+        - Name: 'ZC_DB__AUTHENTICATIONTYPE'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__AUTHENTICATIONTYPE::'
+        - Name: 'ASPNETCORE_ENVIRONMENT'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ASPNETCORE_ENVIRONMENT::'
+        - Name: 'PAT'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:PAT::'
+        - Name: 'USER_VARIABLE'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:USER_VARIABLE::'
         Essential: true
         LogConfiguration:
           LogDriver: awslogs
@@ -355,6 +372,20 @@ Resources:
           Principal:
             Service: 'ecs.amazonaws.com'
           Action: 'sts:AssumeRole'
+      # Policies:
+      # - PolicyName: ecsTaskSecret
+        # PolicyDocument:
+          # Version: '2012-10-17'
+          # Statement:
+          # - Effect: Allow
+            # Action:
+            # - 'ssm:GetParameters'
+            # - 'secretsmanager:GetSecretValue'
+            # - 'kms:Decrypt'
+            # Resource: 
+            # - 'arn:aws:ssm:*:*:parameter/*'
+            # - 'arn:aws:secretsmanager:*:*:secret:*'
+            # - 'arn:aws:kms:*:*:key/*'
       PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundary, !Ref 'AWS::NoValue']
   Service:
     Type: 'AWS::ECS::Service'
@@ -528,10 +559,10 @@ Resources:
       # - !Ref ScaleDownPolicy
 Outputs:
   TemplateID:
-    Description: 'cloudonaut.io template id.'
+    Description: 'template id.'
     Value: 'ecs/service-cluster-alb'
   TemplateVersion:
-    Description: 'cloudonaut.io template version.'
+    Description: 'template version.'
     Value: '13.22.1'
   StackName:
     Description: 'Stack name.'
@@ -544,8 +575,9 @@ Outputs:
   URL:
     Description: 'URL to the ECS service.' # TODO does not work with LoadBalancerHostPattern
     Value: !Sub
-    - '${ClusterURL}${LoadBalancerPath}'
+    - '${ClusterURL}${Path}'
     - ClusterURL: {'Fn::ImportValue': !Sub '${ParentClusterStack}-URL'}
       LoadBalancerPath: !Ref LoadBalancerPath
+      Path: '/v1/docs'
     Export:
       Name: !Sub '${AWS::StackName}-URL'

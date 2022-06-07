@@ -7,7 +7,6 @@ Metadata:
     - Label:
         default: 'VPC Parameters'
       Parameters:
-      - ClusterName
       - VPC
       - SubnetsPrivate
       - SubnetsPublic
@@ -28,6 +27,7 @@ Metadata:
     - Label:
         default: 'Cluster Parameters'
       Parameters:
+      - ClusterName
       - SubnetsReach
       - InstanceType
       - LogsRetentionInDays
