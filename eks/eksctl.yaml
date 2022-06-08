@@ -1,15 +1,15 @@
 apiVersion: eksctl.io/v1alpha5
 availabilityZones:
-- us-east-2a
-- us-east-2b
-- us-east-2c
+- us-east-1a
+- us-east-1b
+- us-east-1c
 iam:
   vpcResourceControllerPolicy: true
   withOIDC: true
 kind: ClusterConfig
 metadata:
   name: zerosystems-cluster
-  region: us-east-2
+  region: us-east-1
   version: "1.21"
 privateCluster:
   enabled: false
@@ -26,25 +26,25 @@ cloudWatch:
     clusterLogging:
         enableTypes: ["audit", "authenticator", "api", "controllerManager", "scheduler"]
 managedNodeGroups:
-  - name: nodegroup2a
+  - name: nodegroup1a
     amiFamily: AmazonLinux2
     instanceType: t3.medium
     minSize: 1
     maxSize: 2
     desiredCapacity: 1
     ssh: 
-      publicKeyName: ec2key
+      publicKeyName: ec2-key
     volumeSize: 80
     volumeType: gp2
     privateNetworking: true
-    availabilityZones: ["us-east-2a"]
+    availabilityZones: ["us-east-1a"]
     labels:
       enviroment: development
       alpha.eksctl.io/cluster-name: zerosystems-cluster
-      alpha.eksctl.io/nodegroup-name: nodegroup2a
+      alpha.eksctl.io/nodegroup-name: nodegroup1a
     tags:
       k8s.io/cluster-autoscaler/node-template/label/enviroment: development
-      alpha.eksctl.io/nodegroup-name: nodegroup2a
+      alpha.eksctl.io/nodegroup-name: nodegroup1a
       alpha.eksctl.io/nodegroup-type: managed
     iam:
       withAddonPolicies:
@@ -52,24 +52,25 @@ managedNodeGroups:
         autoScaler: true
         cloudWatch: true
         ebs: true        #The Amazon Elastic Block Store (Amazon EBS) Container Storage Interface (CSI) driver allows Amazon Elastic Kubernetes Service (Amazon EKS) clusters to manage the lifecycle of Amazon EBS volumes for persistent volumes.  - name: nodegroup2b
+  - name: nodegroup1b
     amiFamily: AmazonLinux2
     instanceType: t3.medium
     minSize: 1
     maxSize: 2
     desiredCapacity: 1
     ssh: 
-      publicKeyName: ec2key
+      publicKeyName: ec2-key
     volumeSize: 80
     volumeType: gp2
     privateNetworking: true
-    availabilityZones: ["us-east-2b"]
+    availabilityZones: ["us-east-1b"]
     labels:
       enviroment: development
       alpha.eksctl.io/cluster-name: zerosystems-cluster
-      alpha.eksctl.io/nodegroup-name: nodegroup2b
+      alpha.eksctl.io/nodegroup-name: nodegroup1b
     tags:
       k8s.io/cluster-autoscaler/node-template/label/enviroment: development
-      alpha.eksctl.io/nodegroup-name: nodegroup2b
+      alpha.eksctl.io/nodegroup-name: nodegroup1b
       alpha.eksctl.io/nodegroup-type: managed
     iam:
       withAddonPolicies:
@@ -77,24 +78,25 @@ managedNodeGroups:
         autoScaler: true
         cloudWatch: true
         ebs: true        #The Amazon Elastic Block Store (Amazon EBS) Container Storage Interface (CSI) driver allows Amazon Elastic Kubernetes Service (Amazon EKS) clusters to manage the lifecycle of Amazon EBS volumes for persistent volumes.  - name: nodegroup2c
+  - name: nodegroup1c
     amiFamily: AmazonLinux2
     instanceType: t3.medium
     minSize: 1
     maxSize: 2
     desiredCapacity: 1
     ssh: 
-      publicKeyName: ec2key
+      publicKeyName: ec2-key
     volumeSize: 80
     volumeType: gp2
     privateNetworking: true
-    availabilityZones: ["us-east-2c"]
+    availabilityZones: ["us-east-1c"]
     labels:
       enviroment: development
       alpha.eksctl.io/cluster-name: zerosystems-cluster
-      alpha.eksctl.io/nodegroup-name: nodegroup2c
+      alpha.eksctl.io/nodegroup-name: nodegroup1c
     tags:
       k8s.io/cluster-autoscaler/node-template/label/enviroment: development
-      alpha.eksctl.io/nodegroup-name: nodegroup2c
+      alpha.eksctl.io/nodegroup-name: nodegroup1c
       alpha.eksctl.io/nodegroup-type: managed
     iam:
       withAddonPolicies:

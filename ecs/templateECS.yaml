@@ -79,7 +79,7 @@ Parameters:
   SubnetsReach:
     Description: 'Should the cluster have direct access to the Internet or do you prefer private subnets with NAT?'
     Type: String
-    Default: Public
+    Default: Private
     AllowedValues:
     - Public
     - Private
@@ -372,82 +372,6 @@ Resources:
       FromPort: 22
       ToPort: 22
       CidrIp: '0.0.0.0/0'
-  # HTTPCodeELB5XXTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Application load balancer returns 5XX HTTP status codes'
-      # Namespace: 'AWS/ApplicationELB'
-      # MetricName: HTTPCode_ELB_5XX_Count
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: LoadBalancer
-        # Value: !GetAtt 'LoadBalancer.LoadBalancerFullName'
-      # TreatMissingData: notBreaching
-  # HTTPCodeTarget5XXTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Application load balancer receives 5XX HTTP status codes from targets'
-      # Namespace: 'AWS/ApplicationELB'
-      # MetricName: HTTPCode_Target_5XX_Count
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: LoadBalancer
-        # Value: !GetAtt 'LoadBalancer.LoadBalancerFullName'
-      # - Name: TargetGroup
-        # Value: !GetAtt 'DefaultTargetGroup.TargetGroupFullName'
-      # TreatMissingData: notBreaching
-  # RejectedConnectionCountTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Application load balancer rejected connections because the load balancer had reached its maximum number of connections'
-      # Namespace: 'AWS/ApplicationELB'
-      # MetricName: RejectedConnectionCount
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: LoadBalancer
-        # Value: !GetAtt 'LoadBalancer.LoadBalancerFullName'
-      # TreatMissingData: notBreaching
-  # TargetConnectionErrorCountTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Application load balancer could not connect to targets'
-      # Namespace: 'AWS/ApplicationELB'
-      # MetricName: TargetConnectionErrorCount
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: LoadBalancer
-        # Value: !GetAtt 'LoadBalancer.LoadBalancerFullName'
-      # - Name: TargetGroup
-        # Value: !GetAtt 'DefaultTargetGroup.TargetGroupFullName'
-      # TreatMissingData: notBreaching
   LoadBalancer: # not monitored, but DefaultTargetGroup is monitored!
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
@@ -456,10 +380,6 @@ Resources:
         Value: !Ref LoadBalancerIdleTimeout
       - Key: 'routing.http2.enabled'
         Value: 'true'
-      # - Key: 'access_logs.s3.enabled'
-        # Value: !If [HasS3Bucket, 'true', 'false']
-      # - !If [HasS3Bucket, {Key: 'access_logs.s3.prefix', Value: !Ref 'AWS::StackName'}, !Ref 'AWS::NoValue']
-      # - !If [HasS3Bucket, {Key: 'access_logs.s3.bucket', Value: {'Fn::ImportValue': !Sub '${ParentS3StackAccessLog}-BucketName'}}, !Ref 'AWS::NoValue']
       Scheme: !Ref LoadBalancerScheme
       SecurityGroups:
       - !Ref ALBSecurityGroup
@@ -764,9 +684,6 @@ Resources:
           HttpTokens: required
         SecurityGroupIds:
         - !Ref SecurityGroup
-        # - !If [HasClientSecurityGroup1, {'Fn::ImportValue': !Sub '${ParentClientStack1}-ClientSecurityGroup'}, !Ref 'AWS::NoValue']
-        # - !If [HasClientSecurityGroup2, {'Fn::ImportValue': !Sub '${ParentClientStack2}-ClientSecurityGroup'}, !Ref 'AWS::NoValue']
-        # - !If [HasClientSecurityGroup3, {'Fn::ImportValue': !Sub '${ParentClientStack3}-ClientSecurityGroup'}, !Ref 'AWS::NoValue']
         UserData:
           'Fn::Base64': !Sub |
             #!/bin/bash -ex
@@ -794,15 +711,6 @@ Resources:
       - Granularity: '1Minute'
         Metrics:
         - 'GroupDesiredCapacity'
-      # NotificationConfigurations: !If
-      # - HasAlertTopic
-      # - - NotificationTypes:
-          # - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
-          # - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
-          # TopicARN: {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # - []
-      # VPCZoneIdentifier: !Split [',', {'Fn::ImportValue': !Sub '${ParentVPCStack}-Subnets${SubnetsReach}'}]
-      # VPCZoneIdentifier: !Join [',', [ !Join [ ",", [ !Ref SubnetsPrivate ] ], [ !Join [ ",", [ !Ref SubnetsPublic ] ]]
       VPCZoneIdentifier: !Ref SubnetsPrivate
       Tags:
       - Key: Name
@@ -821,23 +729,6 @@ Resources:
         - AlarmNotification
         - ScheduledActions
         WaitOnResourceSignals: true
-  # CPUTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Average CPU utilization over last 10 minutes higher than 80%'
-      # Namespace: 'AWS/EC2'
-      # MetricName: CPUUtilization
-      # Statistic: Average
-      # Period: 600
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 80
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: AutoScalingGroupName
-        # Value: !Ref AutoScalingGroup
   AutoScalingGroupLifecycleHookQueue:
     Type: 'AWS::SQS::Queue'
     Properties:
@@ -846,46 +737,10 @@ Resources:
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt 'AutoScalingGroupLifecycleHookDeadLetterQueue.Arn'
         maxReceiveCount: 5
-  # AutoScalingGroupLifecycleHookQueueTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Queue contains messages older than 10 minutes, messages are not consumed'
-      # Namespace: 'AWS/SQS'
-      # MetricName: ApproximateAgeOfOldestMessage
-      # Statistic: Maximum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 600
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: QueueName
-        # Value: !GetAtt 'AutoScalingGroupLifecycleHookQueue.QueueName'
-      # TreatMissingData: notBreaching
   AutoScalingGroupLifecycleHookDeadLetterQueue:
     Type: 'AWS::SQS::Queue'
     Properties:
       QueueName: !Sub '${AWS::StackName}-lifecycle-hook-dlq'
-  # AutoScalingGroupLifecycleHookDeadLetterQueueTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Dead letter queue contains messages, message processing failed'
-      # Namespace: 'AWS/SQS'
-      # MetricName: ApproximateNumberOfMessagesVisible
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: QueueName
-        # Value: !GetAtt 'AutoScalingGroupLifecycleHookDeadLetterQueue.QueueName'
-      # TreatMissingData: notBreaching
   AutoScalingGroupLifecycleHookIAMRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -957,126 +812,6 @@ Resources:
       Targets:
       - Arn: !GetAtt 'ScaleUpLambda.Arn'
         Id: lambda
-  # ContainerInstancesExcessAlarm:
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Cluster is wasting container instances'
-      # Metrics:
-      # - Id: 'overcapacity'
-        # Label: 'overcapacity'
-        # Expression: 'IF((100-cpu) >= capacity, 1, 0) AND IF ((100-memory) >= capacity, 1, 0)'
-        # ReturnData: true
-      # - Id: 'capacity'
-        # Label: 'Percentual capacity per instance.'
-        # Expression: '100/instances'
-        # ReturnData: false
-      # - Id: instances
-        # MetricStat:
-          # Metric:
-            # Namespace: 'AWS/AutoScaling'
-            # MetricName: GroupDesiredCapacity
-            # Dimensions:
-            # - Name: AutoScalingGroupName
-              # Value: !Ref AutoScalingGroup
-          # Stat: Minimum
-          # Period: 60
-        # ReturnData: false
-      # - Id: cpu
-        # MetricStat:
-          # Metric:
-            # Namespace: 'AWS/ECS'
-            # MetricName: 'CPUReservation'
-            # Dimensions:
-            # - Name: ClusterName
-              # Value: !Ref Cluster
-          # Stat: Maximum
-          # Period: 60
-        # ReturnData: false
-      # - Id: memory
-        # MetricStat:
-          # Metric:
-            # Namespace: 'AWS/ECS'
-            # MetricName: 'MemoryReservation'
-            # Dimensions:
-            # - Name: ClusterName
-              # Value: !Ref Cluster
-          # Stat: Maximum
-          # Period: 60
-        # ReturnData: false
-      # ComparisonOperator: GreaterThanThreshold
-      # EvaluationPeriods: 5
-      # DatapointsToAlarm: 5
-      # Threshold: 0
-      # AlarmActions:
-      # - !Ref ScaleDownPolicy
-  # CPUReservationTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Average CPU reservation over last 10 minutes higher than 90%'
-      # Namespace: 'AWS/ECS'
-      # Dimensions:
-      # - Name: ClusterName
-        # Value: !Ref Cluster
-      # MetricName: CPUReservation
-      # ComparisonOperator: GreaterThanThreshold
-      # Statistic: Average # special rule because we scale on reservations and not utilization
-      # Period: 300
-      # EvaluationPeriods: 3
-      # Threshold: 90
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-  # CPUUtilizationTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Average CPU utilization over last 10 minutes higher than 80%'
-      # Namespace: 'AWS/ECS'
-      # Dimensions:
-      # - Name: ClusterName
-        # Value: !Ref Cluster
-      # MetricName: CPUUtilization
-      # ComparisonOperator: GreaterThanThreshold
-      # Statistic: Average
-      # Period: 600
-      # EvaluationPeriods: 1
-      # Threshold: 80
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-  # MemoryReservationTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Average memory reservation over last 10 minutes higher than 90%'
-      # Namespace: 'AWS/ECS'
-      # Dimensions:
-      # - Name: ClusterName
-        # Value: !Ref Cluster
-      # MetricName: MemoryReservation
-      # ComparisonOperator: GreaterThanThreshold
-      # Statistic: Average # special rule because we scale on reservations and not utilization
-      # Period: 600
-      # EvaluationPeriods: 1
-      # Threshold: 90
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-  # MemoryUtilizationTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Average memory utilization over last 10 minutes higher than 80%'
-      # Namespace: 'AWS/ECS'
-      # Dimensions:
-      # - Name: ClusterName
-        # Value: !Ref Cluster
-      # MetricName: MemoryUtilization
-      # ComparisonOperator: GreaterThanThreshold
-      # Statistic: Average
-      # Period: 600
-      # EvaluationPeriods: 1
-      # Threshold: 80
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
   ScaleUpLambdaRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -1142,42 +877,6 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/lambda/${ScaleUpLambda}'
       RetentionInDays: !Ref LogsRetentionInDays
-  # ScaleUpLambdaErrorsTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Invocations failed due to errors in the function'
-      # Namespace: 'AWS/Lambda'
-      # MetricName: Errors
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: FunctionName
-        # Value: !Ref ScaleUpLambda
-      # TreatMissingData: notBreaching
-  # ScaleUpLambdaThrottlesTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Invocation attempts that were throttled due to invocation rates exceeding the concurrent limits'
-      # Namespace: 'AWS/Lambda'
-      # MetricName: Throttles
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: FunctionName
-        # Value: !Ref ScaleUpLambda
-      # TreatMissingData: notBreaching
   DrainInstanceLambdaRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -1345,31 +1044,13 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/lambda/${DrainInstanceLambda}'
       RetentionInDays: !Ref LogsRetentionInDays
-  # DrainInstanceLambdaErrorsTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Invocations failed due to errors in the function'
-      # Namespace: 'AWS/Lambda'
-      # MetricName: Errors
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: FunctionName
-        # Value: !Ref DrainInstanceLambda
-      # TreatMissingData: notBreaching
 Outputs:
   TemplateID:
-    Description: 'cloudonaut.io template id.'
+    Description: 'template id.'
     Value: 'ecs/cluster-cost-optimized'
   TemplateVersion:
-    Description: 'cloudonaut.io template version.'
-    Value: '13.22.1'
+    Description: 'template version.'
+    Value: '0.1.22'
   StackName:
     Description: 'Stack name.'
     Value: !Sub '${AWS::StackName}'

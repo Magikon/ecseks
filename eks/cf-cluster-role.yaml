@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  IAM role for serviceaccount "kube-system/aws-node" [created and managed by
+  eksctl]
+Resources:
+  Role1:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'oidc.eks.us-east-1.amazonaws.com/id/1DE8A96A24401081AA247C627ACF1F70:aud': sts.amazonaws.com
+                'oidc.eks.us-east-1.amazonaws.com/id/1DE8A96A24401081AA247C627ACF1F70:sub': 'system:serviceaccount:kube-system:aws-node'
+            Effect: Allow
+            Principal:
+              Federated: >-
+                arn:aws:iam::139013895924:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/1DE8A96A24401081AA247C627ACF1F70
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy'
+Outputs:
+  Role1:
+    Value: !GetAtt Role1.Arn

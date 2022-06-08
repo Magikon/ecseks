@@ -8,7 +8,6 @@ Metadata:
         default: 'Parent Stacks'
       Parameters:
       - ParentClusterStack
-      - ParentAlertStack
       - ParentZoneStack
     - Label:
         default: 'Load Balancer Parameters'
@@ -31,24 +30,12 @@ Metadata:
       - MaxCapacity
       - MinCapacity
       - HealthCheckGracePeriod
-    - Label:
-        default: 'Permission Parameters'
-      Parameters:
-      - PermissionsBoundary
 Parameters:
   ParentClusterStack:
     Description: 'Stack name of parent Cluster stack based on ecs/cluster.yaml template.'
     Type: String
-  ParentAlertStack:
-    Description: 'Optional but recommended stack name of parent alert stack based on operations/alert.yaml template.'
-    Type: String
-    Default: ''
   ParentZoneStack:
     Description: 'Optional stack name of parent zone stack based on vpc/zone-*.yaml template.'
-    Type: String
-    Default: ''
-  PermissionsBoundary:
-    Description: 'Optional ARN for a policy that will be used as the permission boundary for all roles created by this template.'
     Type: String
     Default: ''
   LoadBalancerPriority:
@@ -122,11 +109,11 @@ Parameters:
     MinValue: 0
     MaxValue: 1800
 Conditions:
-  HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundary, '']]
+  # HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundary, '']]
   HasLoadBalancerHttps: !Equals [!Ref LoadBalancerHttps, 'true']
   HasLoadBalancerPath: !Not [!Equals [!Ref LoadBalancerPath, '']]
   HasLoadBalancerHostPattern: !Not [!Equals [!Ref LoadBalancerHostPattern, '']]
-  HasAlertTopic: !Not [!Equals [!Ref ParentAlertStack, '']]
+  # HasAlertTopic: !Not [!Equals [!Ref ParentAlertStack, '']]
   HasZone: !Not [!Equals [!Ref ParentZoneStack, '']]
   HasAutoScaling: !Equals [!Ref AutoScaling, 'true']
 Resources:
@@ -151,9 +138,9 @@ Resources:
             - 'secretsmanager:GetSecretValue'
             - 'kms:Decrypt'
             Resource: 
-            - 'arn:aws:ssm:*:*:parameter/*'
-            - 'arn:aws:secretsmanager:*:*:secret:*'
-            - 'arn:aws:kms:*:*:key/*'
+            - 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*'
+            - 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*'
+            - 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*'
       - PolicyName: ecsTaskECR
         PolicyDocument:
           Version: '2012-10-17'
@@ -165,15 +152,6 @@ Resources:
             - 'ecr:BatchCheckLayerAvailability'
             - 'ecr:GetAuthorizationToken'
             Resource: '*'
-      # - PolicyName: ecsTaskRDS
-        # PolicyDocument:
-          # Version: '2012-10-17'
-          # Statement:
-          # - Effect: Allow
-            # Action:
-            # - 'rds:*'
-            # - 'rds-db:connect'
-            # Resource: '*'
       - PolicyName: logs
         PolicyDocument:
           Version: '2012-10-17'
@@ -265,46 +243,6 @@ Resources:
       TargetGroupAttributes:
       - Key: deregistration_delay.timeout_seconds
         Value: !Ref LoadBalancerDeregistrationDelay
-  # HTTPCodeTarget5XXTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Application load balancer receives 5XX HTTP status codes from targets'
-      # Namespace: 'AWS/ApplicationELB'
-      # MetricName: HTTPCode_Target_5XX_Count
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: LoadBalancer
-        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-LoadBalancerFullName'}
-      # - Name: TargetGroup
-        # Value: !GetAtt LoadBalancerTargetGroup.TargetGroupFullName
-      # TreatMissingData: notBreaching
-  # TargetConnectionErrorCountTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Application load balancer could not connect to targets'
-      # Namespace: 'AWS/ApplicationELB'
-      # MetricName: TargetConnectionErrorCount
-      # Statistic: Sum
-      # Period: 60
-      # EvaluationPeriods: 1
-      # ComparisonOperator: GreaterThanThreshold
-      # Threshold: 0
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-      # Dimensions:
-      # - Name: LoadBalancer
-        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-LoadBalancerFullName'}
-      # - Name: TargetGroup
-        # Value: !GetAtt LoadBalancerTargetGroup.TargetGroupFullName
-      # TreatMissingData: notBreaching
   LoadBalancerHttpListenerRule:
     Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
     Properties:
@@ -372,21 +310,7 @@ Resources:
           Principal:
             Service: 'ecs.amazonaws.com'
           Action: 'sts:AssumeRole'
-      # Policies:
-      # - PolicyName: ecsTaskSecret
-        # PolicyDocument:
-          # Version: '2012-10-17'
-          # Statement:
-          # - Effect: Allow
-            # Action:
-            # - 'ssm:GetParameters'
-            # - 'secretsmanager:GetSecretValue'
-            # - 'kms:Decrypt'
-            # Resource: 
-            # - 'arn:aws:ssm:*:*:parameter/*'
-            # - 'arn:aws:secretsmanager:*:*:secret:*'
-            # - 'arn:aws:kms:*:*:key/*'
-      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundary, !Ref 'AWS::NoValue']
+      PermissionsBoundary: !Ref 'AWS::NoValue'
   Service:
     Type: 'AWS::ECS::Service'
     Properties:
@@ -410,44 +334,6 @@ Resources:
         Field: instanceId
       Role: !GetAtt 'ServiceRole.Arn'
       TaskDefinition: !Ref TaskDefinition
-  # CPUUtilizationTooHighAlarm:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Average CPU utilization over last 10 minutes higher than 80%'
-      # Namespace: 'AWS/ECS'
-      # Dimensions:
-      # - Name: ClusterName
-        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-Cluster'}
-      # - Name: ServiceName
-        # Value: !GetAtt 'Service.Name'
-      # MetricName: CPUUtilization
-      # ComparisonOperator: GreaterThanThreshold
-      # Statistic: Average
-      # Period: 300
-      # EvaluationPeriods: 1
-      # Threshold: 80
-      # AlarmActions:
-      # - {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-  # ServiceFailedNotification:
-    # Condition: HasAlertTopic
-    # Type: 'AWS::Events::Rule'
-    # Properties:
-      # EventPattern:
-        # source:
-        # - 'aws.ecs'
-        # 'detail-type':
-        # - 'ECS Service Action'
-        # resources:
-        # - !Ref Service
-        # detail:
-          # eventType:
-          # - ERROR
-          # - WARN
-      # State: ENABLED
-      # Targets:
-      # - Arn: {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
-        # Id: rule
   ScalableTargetRole: # based on http://docs.aws.amazon.com/AmazonECS/latest/developerguide/autoscale_IAM_role.html
     Condition: HasAutoScaling
     Type: 'AWS::IAM::Role'
@@ -459,7 +345,7 @@ Resources:
           Principal:
             Service: 'application-autoscaling.amazonaws.com'
           Action: 'sts:AssumeRole'
-      PermissionsBoundary: !If [HasPermissionsBoundary, !Ref PermissionsBoundary, !Ref 'AWS::NoValue']
+      PermissionsBoundary: !Ref 'AWS::NoValue'
       Policies:
       - PolicyName: ecs
         PolicyDocument:
@@ -519,44 +405,6 @@ Resources:
         StepAdjustments:
         - MetricIntervalUpperBound: 0
           ScalingAdjustment: -25
-  # CPUUtilizationHighAlarm:
-    # Condition: HasAutoScaling
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Service is running out of CPU'
-      # Namespace: 'AWS/ECS'
-      # Dimensions:
-      # - Name: ClusterName
-        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-Cluster'}
-      # - Name: ServiceName
-        # Value: !GetAtt 'Service.Name'
-      # MetricName: CPUUtilization
-      # ComparisonOperator: GreaterThanThreshold
-      # Statistic: Average
-      # Period: 300
-      # EvaluationPeriods: 1
-      # Threshold: 60
-      # AlarmActions:
-      # - !Ref ScaleUpPolicy
-  # CPUUtilizationLowAlarm:
-    # Condition: HasAutoScaling
-    # Type: 'AWS::CloudWatch::Alarm'
-    # Properties:
-      # AlarmDescription: 'Service is wasting CPU'
-      # Namespace: 'AWS/ECS'
-      # Dimensions:
-      # - Name: ClusterName
-        # Value: {'Fn::ImportValue': !Sub '${ParentClusterStack}-Cluster'}
-      # - Name: ServiceName
-        # Value: !GetAtt 'Service.Name'
-      # MetricName: CPUUtilization
-      # ComparisonOperator: LessThanThreshold
-      # Statistic: Average
-      # Period: 300
-      # EvaluationPeriods: 3
-      # Threshold: 30
-      # AlarmActions:
-      # - !Ref ScaleDownPolicy
 Outputs:
   TemplateID:
     Description: 'template id.'
