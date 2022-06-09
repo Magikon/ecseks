@@ -226,6 +226,10 @@ Outputs:
     Value: !Ref VPC
     Export:
       Name: !Sub '${AWS::StackName}::VPC'  
+  CIDR:
+    Value: !GetAtt VPC.CidrBlock
+    Export:
+      Name: !Sub '${AWS::StackName}::CIDR'
   SubnetsPrivate:
     Value: !Join 
       - ','

@@ -109,11 +109,9 @@ Parameters:
     MinValue: 0
     MaxValue: 1800
 Conditions:
-  # HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundary, '']]
   HasLoadBalancerHttps: !Equals [!Ref LoadBalancerHttps, 'true']
   HasLoadBalancerPath: !Not [!Equals [!Ref LoadBalancerPath, '']]
   HasLoadBalancerHostPattern: !Not [!Equals [!Ref LoadBalancerHostPattern, '']]
-  # HasAlertTopic: !Not [!Equals [!Ref ParentAlertStack, '']]
   HasZone: !Not [!Equals [!Ref ParentZoneStack, '']]
   HasAutoScaling: !Equals [!Ref AutoScaling, 'true']
 Resources:
@@ -138,9 +136,9 @@ Resources:
             - 'secretsmanager:GetSecretValue'
             - 'kms:Decrypt'
             Resource: 
-            - 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*'
-            - 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*'
-            - 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+            - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*'
+            - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*'
+            - !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*'
       - PolicyName: ecsTaskECR
         PolicyDocument:
           Version: '2012-10-17'
@@ -178,21 +176,21 @@ Resources:
           Protocol: tcp
         Secrets: 
         - Name: 'ZC_DB__DATABASENAME'
-          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__DATABASENAME::'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecretCF-OzkEVp:ZC_DB__DATABASENAME::'
         - Name: 'ZC_DB__PASSWORD'
-          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__PASSWORD::'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecretCF-OzkEVp:ZC_DB__PASSWORD::'
         - Name: 'ZC_DB__SERVERURL'
-          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__SERVERURL::'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecretCF-OzkEVp:ZC_DB__SERVERURL::'
         - Name: 'ZC_DB__USERNAME'
-          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__USERNAME::'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecretCF-OzkEVp:ZC_DB__USERNAME::'
         - Name: 'ZC_DB__AUTHENTICATIONTYPE'
-          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ZC_DB__AUTHENTICATIONTYPE::'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecretCF-OzkEVp:ZC_DB__AUTHENTICATIONTYPE::'
         - Name: 'ASPNETCORE_ENVIRONMENT'
-          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:ASPNETCORE_ENVIRONMENT::'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecretCF-OzkEVp:ASPNETCORE_ENVIRONMENT::'
         - Name: 'PAT'
-          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:PAT::'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecretCF-OzkEVp:PAT::'
         - Name: 'USER_VARIABLE'
-          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecret-I64pQO:USER_VARIABLE::'
+          ValueFrom: 'arn:aws:secretsmanager:us-east-1:139013895924:secret:ZeroSecretCF-OzkEVp:USER_VARIABLE::'
         Essential: true
         LogConfiguration:
           LogDriver: awslogs
