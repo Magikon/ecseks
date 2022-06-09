@@ -173,6 +173,33 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}/ServiceRole'
+  RoleEndpoint:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument: !Sub 
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Federated": "${IamOidcProviderArn}"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                   "StringEquals": {
+                      "${OidcProviderEndpoint}:sub": "system:serviceaccount:kube-system:aws-node", 
+                      "${OidcProviderEndpoint}:aud": "sts.amazonaws.com"
+                    }
+                  }
+                }
+              ]
+            }              
+        - IamOidcProviderArn: !Join [ "", [!Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/oidc.eks.${AWS::Region}.amazonaws.com/id/', !Select [0, !Split [".", !Select [1, !Split ["//", !GetAtt ControlPlane.Endpoint]]]]]]
+          OidcProviderEndpoint: !Join [ "", [!Sub 'oidc.eks.${AWS::Region}.amazonaws.com/id/', !Select [0, !Split [".", !Select [1, !Split ["//", !GetAtt ControlPlane.Endpoint]]]]]]
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy'
 Outputs:
   ARN:
     Value: !GetAtt 
@@ -217,3 +244,11 @@ Outputs:
   OidcProviderID:
     Description: The OpenID Connect provider ID
     Value: !Select [0, !Split [".", !Select [1, !Split ["//", !GetAtt ControlPlane.Endpoint]]]]
+  IamOidcProviderArn:
+    Description: arn
+    Value: !Join [ "", [!Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/oidc.eks.${AWS::Region}.amazonaws.com/id/', !Select [0, !Split [".", !Select [1, !Split ["//", !GetAtt ControlPlane.Endpoint]]]]]]
+  OidcProviderEndpoint:
+    Description: arn
+    Value: !Join [ "", [!Sub 'oidc.eks.${AWS::Region}.amazonaws.com/id/', !Select [0, !Split [".", !Select [1, !Split ["//", !GetAtt ControlPlane.Endpoint]]]]]]
+  RoleEndpoint:
+    Value: !GetAtt RoleEndpoint.Arn
