@@ -14,6 +14,10 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - SSHKeyName
+      - SubnetsReach
+      - InstanceType
+      - MaxSize
+      - MinSize
     - Label:
         default: 'Load Balancer Parameters'
       Parameters:
@@ -23,10 +27,6 @@ Metadata:
         default: 'Cluster Parameters'
       Parameters:
       - ClusterName
-      - SubnetsReach
-      - InstanceType
-      - MaxSize
-      - MinSize
     - Label:
         default: 'Task Parameters'
       Parameters:
@@ -40,13 +40,17 @@ Metadata:
       - MinCapacity
 Parameters:
   ClusterName:
+    Description: 'ECS cluster Name.'
     Type: String
     Default: zerosystems
   VPC:
+    Description: 'Select VPC.'
     Type: AWS::EC2::VPC::Id
   SubnetsPrivate:
+    Description: 'Select Private Subnets of selected VPC.'
     Type: List<AWS::EC2::Subnet::Id>
   SubnetsPublic:
+    Description: 'Select Public Subnets of selected VPC.'
     Type: List<AWS::EC2::Subnet::Id>
   SSHKeyName:
     Description: 'Optional key pair of the ec2-user to establish a SSH connection to the EC2 instances of the ECS cluster.'
