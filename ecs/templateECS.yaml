@@ -1206,7 +1206,7 @@ Resources:
           Enable: true
           Rollback: true
       DesiredCount: !Ref DesiredCount
-      HealthCheckGracePeriodSeconds: '60'
+      HealthCheckGracePeriodSeconds: '300'
       LoadBalancers:
       - ContainerName: zerosystemsapi
         ContainerPort: 80
@@ -1261,8 +1261,9 @@ Resources:
       RoleARN: !GetAtt 'ScalableTargetRole.Arn'
       ScalableDimension: 'ecs:service:DesiredCount'
       ServiceNamespace: ecs
-  ScaleUpPolicy:
+  ScaleUpPolicyService:
     Condition: HasAutoScaling
+    DependsOn: Service
     Type: 'AWS::ApplicationAutoScaling::ScalingPolicy'
     Properties:
       PolicyName: !Sub '${AWS::StackName}-scale-up'
@@ -1275,8 +1276,9 @@ Resources:
         StepAdjustments:
         - MetricIntervalLowerBound: 0
           ScalingAdjustment: 25
-  ScaleDownPolicy:
+  ScaleDownPolicyService:
     Condition: HasAutoScaling
+    DependsOn: Service
     Type: 'AWS::ApplicationAutoScaling::ScalingPolicy'
     Properties:
       PolicyName: !Sub '${AWS::StackName}-scale-down'
@@ -1292,6 +1294,7 @@ Resources:
   CPUUtilizationHighAlarm:
     Condition: HasAutoScaling
     Type: 'AWS::CloudWatch::Alarm'
+    DependsOn: Service
     Properties:
       AlarmDescription: 'Service is running out of CPU'
       Namespace: 'AWS/ECS'
@@ -1307,10 +1310,11 @@ Resources:
       EvaluationPeriods: 1
       Threshold: 60
       AlarmActions:
-      - !Ref ScaleUpPolicy
+      - !Ref ScaleUpPolicyService
   CPUUtilizationLowAlarm:
     Condition: HasAutoScaling
     Type: 'AWS::CloudWatch::Alarm'
+    DependsOn: Service
     Properties:
       AlarmDescription: 'Service is wasting CPU'
       Namespace: 'AWS/ECS'
@@ -1326,7 +1330,7 @@ Resources:
       EvaluationPeriods: 3
       Threshold: 30
       AlarmActions:
-      - !Ref ScaleDownPolicy
+      - !Ref ScaleDownPolicyService
   CPUUtilizationTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
