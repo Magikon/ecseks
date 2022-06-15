@@ -54,7 +54,7 @@ Parameters:
     Type: List<AWS::EC2::Subnet::Id>
   SSHKeyName:
     Description: 'Optional key pair of the ec2-user to establish a SSH connection to the EC2 instances of the ECS cluster.'
-    Type: AWS::EC2::KeyPair::KeyName
+    Type: String
     Default: ''
   SubnetsReach:
     Description: 'Should the cluster have direct access to the Internet or do you prefer private subnets with NAT?'
@@ -444,7 +444,7 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Init':
         configSets:
-          default: [awslogs, ssh-access, install]
+          default: [awslogs, install]
         awslogs:
           packages:
             yum:
@@ -578,72 +578,6 @@ Resources:
                 - '/etc/awslogs/awslogs.conf'
                 - '/etc/awslogs/awscli.conf'
                 - '/etc/awslogs/config/ecs.conf'
-        ssh-access:
-          files:
-            '/opt/authorized_keys_command.sh':
-              content: |
-                #!/bin/bash -e
-                if [ -z "$1" ]; then
-                  exit 1
-                fi
-                UnsaveUserName="$1"
-                UnsaveUserName=${UnsaveUserName//".plus."/"+"}
-                UnsaveUserName=${UnsaveUserName//".equal."/"="}
-                UnsaveUserName=${UnsaveUserName//".comma."/","}
-                UnsaveUserName=${UnsaveUserName//".at."/"@"}
-                aws iam list-ssh-public-keys --user-name "$UnsaveUserName" --query "SSHPublicKeys[?Status == 'Active'].[SSHPublicKeyId]" --output text | while read -r KeyId; do
-                  aws iam get-ssh-public-key --user-name "$UnsaveUserName" --ssh-public-key-id "$KeyId" --encoding SSH --query "SSHPublicKey.SSHPublicKeyBody" --output text
-                done
-              mode: '000755'
-              owner: root
-              group: root
-            '/opt/import_users.sh':
-              content: |
-                #!/bin/bash -e
-                aws iam list-users --query "Users[].[UserName]" --output text | while read User; do
-                  SaveUserName="$User"
-                  SaveUserName=${SaveUserName//"+"/".plus."}
-                  SaveUserName=${SaveUserName//"="/".equal."}
-                  SaveUserName=${SaveUserName//","/".comma."}
-                  SaveUserName=${SaveUserName//"@"/".at."}
-                  if [ "${#SaveUserName}" -le "32" ]; then
-                    if ! id -u "$SaveUserName" >/dev/null 2>&1; then
-                      #sudo will read each file in /etc/sudoers.d, skipping file names that end in ?~? or contain a ?.? character to avoid causing problems with package manager or editor temporary/backup files.
-                      SaveUserFileName=$(echo "$SaveUserName" | tr "." " ")
-                      /usr/sbin/useradd "$SaveUserName"
-                      echo "$SaveUserName ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$SaveUserFileName"
-                    fi
-                  else
-                    echo "Can not import IAM user ${SaveUserName}. User name is longer than 32 characters."
-                  fi
-                done
-              mode: '000755'
-              owner: root
-              group: root
-            '/etc/cron.d/import_users':
-              content: |
-                */10 * * * * root /opt/import_users.sh
-              mode: '000644'
-              owner: root
-              group: root
-          commands:
-            'a_configure_sshd_command':
-              command: 'sed -e ''/AuthorizedKeysCommand / s/^#*/#/'' -i /etc/ssh/sshd_config; echo -e ''\nAuthorizedKeysCommand /opt/authorized_keys_command.sh'' >> /etc/ssh/sshd_config'
-              test: '! grep -q ''^AuthorizedKeysCommand /opt/authorized_keys_command.sh'' /etc/ssh/sshd_config'
-            'b_configure_sshd_commanduser':
-              command: 'sed -e ''/AuthorizedKeysCommandUser / s/^#*/#/'' -i /etc/ssh/sshd_config; echo -e ''\nAuthorizedKeysCommandUser nobody'' >> /etc/ssh/sshd_config'
-              test: '! grep -q ''^AuthorizedKeysCommandUser nobody'' /etc/ssh/sshd_config'
-            'c_import_users':
-              command: './import_users.sh'
-              cwd: '/opt'
-          services:
-            sysvinit:
-              sshd:
-                enabled: true
-                ensureRunning: true
-                commands:
-                - 'a_configure_sshd_command'
-                - 'b_configure_sshd_commanduser'
         install:
           packages:
             yum:
@@ -1112,6 +1046,7 @@ Resources:
       - Name: zerosystemsapi # if you change this, you also must change the AWS::ECS::Service
         Image: !Ref Image
         Memory: 128
+        Cpu: 128
         PortMappings:
         - ContainerPort: 80 # if you change this, you also must change the AWS::ECS::Service
           Protocol: tcp
@@ -1307,7 +1242,7 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       Statistic: Average
       Period: 300
-      EvaluationPeriods: 1
+      EvaluationPeriods: 3
       Threshold: 60
       AlarmActions:
       - !Ref ScaleUpPolicyService
