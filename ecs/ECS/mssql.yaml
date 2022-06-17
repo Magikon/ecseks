@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'This CloudFormation script provisions a RDS instance(s). '
+Description: 'This CloudFormation script provisions a RDS instance and create Secret. '
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
@@ -10,6 +10,7 @@ Metadata:
     - Label:
         default: 'RDS Parameters'
       Parameters:
+      - ClusterName
       - DBPortNumber
       - AllocatedStorage
       - DBInstanceClass
@@ -53,11 +54,11 @@ Parameters:
     Description: The master password for the DB instance.
     Type: String
     NoEcho: true
-    Default: 'zeroconnect'  
+    Default: 'testpassword'  
   DBName:
     Description: DB instance Name.
     Type: String
-    Default: 'ZeroDb'
+    Default: 'zerodb'
 Resources:
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -123,7 +124,7 @@ Resources:
   Secret:
     Type: 'AWS::SecretsManager::Secret'
     Properties:
-      Name: ZeroSecretCF
+      Name: !Sub '${AWS::StackName}Secret'
       Description: This secret for infrastructure
       SecretString: !Join 
                        - ''
@@ -142,27 +143,27 @@ Resources:
           Key: Name
           Value: ZeroSystems
 Outputs:
-  ASPNETCORE_ENVIRONMENT:
-    Description: 'ASP Enviroment'
+  ASPNETCOREENVIRONMENT:
+    Description: 'ASPNETCORE_ENVIRONMENT'
     Value: 'Development'
-  ZC_DB__DATABASENAME:
-    Description: 'Database Name'
+  ZCDBDATABASENAME:
+    Description: 'ZC_DB__DATABASENAME'
     Value: !Ref DBName
-  ZC_DB__PASSWORD:
-    Description: 'Database Password'
-    Value: !Ref MasterUserPassword
-  ZC_DB__SERVERURL:
-    Description: 'Database Endpoint'
+  ZCDBPASSWORD:
+    Description: 'ZC_DB__PASSWORD'
+    Value: 'Does not print protected information'
+  ZCDBSERVERURL:
+    Description: 'ZC_DB__SERVERURL'
     Value: !GetAtt MSSQL.Endpoint.Address
-  ZC_DB__USERNAME:
-    Description: 'Database Master Username'
+  ZCDBUSERNAME:
+    Description: 'ZC_DB__USERNAME'
     Value: !Ref MasterUsername
   PAT:
     Description: 'PAT'
     Value: 'p7ahsjwvjkuawy3boimjgmzpvmb7ei6a5wbkuaepjdaserljjb7q'
-  USER_VARIABLE:
-    Description: 'User'
+  USERVARIABLE:
+    Description: 'USER_VARIABLE'
     Value: 'haghajanyan@zerosystems.com'
-  ZC_DB__AUTHENTICATIONTYPE:
-    Description: 'Authentication'
+  ZCDBAUTHENTICATIONTYPE:
+    Description: 'ZC_DB__AUTHENTICATIONTYPE'
     Value: 'credentials'

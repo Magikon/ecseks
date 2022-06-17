@@ -313,7 +313,7 @@ Outputs:
     Description: 'VPC.'
     Value: !Ref VPC
     Export:
-      Name: !Sub '${AWS::StackName}-VPC'
+      Name: !Sub '${AWS::StackName}'
   InternetGateway:
     Description: 'InternetGateway.'
     Value: !Ref InternetGateway

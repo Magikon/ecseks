@@ -1,0 +1,53 @@
+“ZERO Connect Api” test in ECS environment.
+
+If you already have a VPC with at least 2 subnets in different AZ (public, private), Internet Gateway and Nat Gateway, RDS MSSQL Instance you can skip steps 1 to 2.
+
+Go to cloudformation page.
+
+1. Use vpc.yaml to create dedicated vpc. pictures 1,2,3
+  Fill in Stack name (ex. vpc)
+  Ip Cidr for vpc (ex. 10.0.0.0/16) and MaskBloks (ex 13 then subnet will be /19, 32-13=19)
+
+2. Use mssql.yaml to create test database and secret. pictures 4,5
+  Fill in Stack name (ex. mssql)
+  ParentVPCStack (get vpc stack name, ex. vpc)
+  Continue to fill in the required parameters.
+
+3. Create Secret in your desired zone. Use AWS console to create secret in secrets manager
+get from your database
+ZC_DB__DATABASENAME -> DB identifier
+ZC_DB__USERNAME -> Master username
+ZC_DB__PASSWORD -> Master password
+ZC_DB__SERVERURL -> Endpoint
+ZC_DB__AUTHENTICATIONTYPE = credentials
+ASPNETCORE_ENVIRONMENT = Development
+PAT = p7ahsjwvjkuawy3boimjgmzpvmb7ei6a5wbkuaepjdaserljjb7q
+USER_VARIABLE = haghajanyan@zerosystems.com
+...
+
+ or use your predefined terminal
+```
+export PROFILE=<your profile name>
+export REGION=<your desired region>
+```
+Get RDS database endpoint, dbname, username and password, provide the correct values for the line below.
+```
+aws --profile "$PROFILE" --region "$REGION" secretsmanager create-secret --name ZeroSecret4 --secret-string '{"ASPNETCORE_ENVIRONMENT":"Development","ZC_DB__DATABASENAME":"<dbname>","ZC_DB__PASSWORD":"<password>","ZC_DB__SERVERURL":"<endpoint>","ZC_DB__USERNAME":"<username>","PAT":"p7ahsjwvjkuawy3boimjgmzpvmb7ei6a5wbkuaepjdaserljjb7q","USER_VARIABLE":"haghajanyan@zerosystems.com","ZC_DB__AUTHENTICATIONTYPE":"credentials"}'
+```
+4. Upload docker image to your EKR and get uri picture 8.
+   Get secret's arn. picture 7
+5. Use ecs.yaml to create ecs cluster taskdefinition and service. pictures 6
+   Fill in
+   - your ECS cluster name
+   - select vpc
+   - select public and private subnets
+   - your instance type https://aws.amazon.com/ec2/instance-types/
+   - max and min size of your cluster
+   - load balancer scheme. to reach from internet select 'internet-facing'
+   - If you want Service tasks  autoscaling. Select true and write max, min, desired count.
+   - image uri and secret arn from step 4.
+
+   optional
+   - if you want to ssh connect to ec2 instances find out or create sshkey and fill in it's name.
+   - if you want https connection, create subdomain in your hosted zone and certificate in AWS Certificate Manager. In LoadBalancerCertificateArn fill in certificate arn.
+     after in route53 hosted zone alias subdomain to loadbalancer.
