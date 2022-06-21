@@ -151,7 +151,7 @@ helm upgrade --install -n kube-system --set syncSecret.enabled=true csi-secrets-
 kubectl apply -f https://raw.githubusercontent.com/aws/secrets-store-csi-driver-provider-aws/main/deployment/aws-provider-installer.yaml
 
 # set terminal session variabls
-REGION=us-east-2
+REGION=us-east-1
 CLUSTERNAME=zerosystems-cluster
 PROFILE=zero
 

@@ -51,3 +51,29 @@ aws --profile "$PROFILE" --region "$REGION" secretsmanager create-secret --name 
    - if you want to ssh connect to ec2 instances find out or create sshkey and fill in it's name.
    - if you want https connection, create subdomain in your hosted zone and certificate in AWS Certificate Manager. In LoadBalancerCertificateArn fill in certificate arn.
      after in route53 hosted zone alias subdomain to loadbalancer.
+
+
+
+docker save 139013895924.dkr.ecr.us-east-1.amazonaws.com/zeroconnect-sql:latest | gzip > zeroconnect-sql.tar.gz
+
+docker save 139013895924.dkr.ecr.us-east-1.amazonaws.com/zeroconnect-sql:latest -o zeroconnect-sql.tar
+
+export PROFILE=<your profile name>
+export REGION=<your desired region>
+export ECR=zeroconnect-sql
+
+export ACCOUNT=$(aws sts get-caller-identity --profile $PROFILE --query "Account" --output text)
+
+
+aws ecr create-repository --region $REGION \
+--profile $PROFILE --repository-name $ECR
+
+aws ecr get-login-password \
+--region $REGION --profile $PROFILE | docker login \
+--username AWS \
+--password-stdin $ACCOUNT.dkr.ecr.$REGION.amazonaws.com
+
+
+docker import /<path to>/zeroconnect-sql.tar.gz $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$ECR:latest
+
+docker push $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$ECR:latest
