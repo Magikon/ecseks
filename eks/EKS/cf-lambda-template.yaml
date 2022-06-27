@@ -1,0 +1,81 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ECS: cluster with service'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'VPC Parameters'
+      Parameters:
+      - VPC
+Parameters:
+  VPC:
+    Type: AWS::EC2::VPC::Id
+Resources:
+  TestLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'lambda.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      PermissionsBoundary: !Ref 'AWS::NoValue'
+      Policies:
+      - PolicyName: draininstance
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ec2:DescribeVpcs'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
+  TestInstanceLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          def handler(event, context):
+            responseData = {}
+            if event['RequestType'] == 'Delete':
+              responseData['Reason'] = "Success"
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "")
+            else:
+              try:
+                vpcid = event['ResourceProperties']['vpc']
+                ec2 = boto3.resource('ec2')
+                vpc = ec2.Vpc(id=vpcid)
+                responseData['Reason'] = "Success"
+                responseData['CIDR'] = vpc.cidr_block
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, vpc.cidr_block)
+              except Exception as e:
+                responseData['Reason'] = str(e)
+                cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "")
+      MemorySize: 128
+      Handler: 'index.handler'
+      Runtime: 'python3.7'
+      Role: !GetAtt 'TestLambdaRole.Arn'
+      Timeout: 30
+      ReservedConcurrentExecutions: 1
+  CustomResource:
+    Type: "Custom::vpccidr"
+    Properties:
+      ServiceToken: !GetAtt 'TestInstanceLambda.Arn'
+      vpc: !Ref VPC
+Outputs:
+  LambdaResult:
+    Description: 'Return value Cidr of vpc'
+    Value: !GetAtt CustomResource.CIDR
+  LambdaReason:
+    Description: 'Return reason of custom result'
+    Value: !GetAtt CustomResource.Reason

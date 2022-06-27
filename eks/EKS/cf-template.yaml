@@ -1,0 +1,167 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ECS: cluster with service'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'VPC Parameters'
+      Parameters:
+      - VPC
+      - SubnetsPrivate
+      - SubnetsPublic
+    - Label:
+        default: 'EC2 Parameters'
+      Parameters:
+      - SSHKeyName
+      - SubnetsReach
+      - InstanceType
+      - MaxSize
+      - MinSize
+    - Label:
+        default: 'Load Balancer Parameters'
+      Parameters:
+      - LoadBalancerScheme
+      - LoadBalancerCertificateArn
+    - Label:
+        default: 'Cluster Parameters'
+      Parameters:
+      - ClusterName
+    - Label:
+        default: 'Task Parameters'
+      Parameters:
+      - Image
+    - Label:
+        default: 'Service Parameters'
+      Parameters:
+      - AutoScaling
+      - DesiredCount
+      - MaxCapacity
+      - MinCapacity
+Parameters:
+  EcrImageUri:
+    Description: ECR image URI
+    Type: String
+Resources:
+  DrainInstanceLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'lambda.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      PermissionsBoundary: !Ref 'AWS::NoValue'
+      Policies:
+      - PolicyName: draininstance
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ecs:updateContainerInstancesState'
+            - 'ecs:listTasks'
+            Resource: '*'
+
+  DrainInstanceLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      Roles:
+      - !Ref DrainInstanceLambdaRole
+      PolicyName: lambda
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action:
+          - 'logs:CreateLogStream'
+          - 'logs:PutLogEvents'
+          Resource: !GetAtt 'DrainInstanceLogGroup.Arn'
+  DrainInstanceLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      PackageType: Image
+      Code:
+        ImageUri: !Ref 'EcrImageUri'
+      MemorySize: 128
+      ImageConfig:
+        Command:
+          - 'app.handler'
+        # EntryPoint:
+          # - '/usr/local/bin/python -m awslambdaric'
+        # WorkingDirectory: '/app'
+      Role: !GetAtt 'DrainInstanceLambdaRole.Arn'
+      Timeout: 300
+      Environment:
+        Variables:
+          DRAINING_TIMEOUT: 60
+      ReservedConcurrentExecutions: 1
+  DrainInstanceLambda1:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      PackageType: Image
+      Code:
+        ImageUri: !Ref 'EcrImageUri'
+      MemorySize: 128
+      ImageConfig:
+        Command:
+          - 'app1.handler'
+        # EntryPoint:
+          # - '/usr/local/bin/python -m awslambdaric'
+        # WorkingDirectory: '/app'
+      Role: !GetAtt 'DrainInstanceLambdaRole.Arn'
+      Timeout: 300
+      Environment:
+        Variables:
+          DRAINING_TIMEOUT: 60
+      ReservedConcurrentExecutions: 1
+  DrainInstanceLambda2:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      PackageType: Image
+      Code:
+        ImageUri: !Ref 'EcrImageUri'
+      MemorySize: 128
+      ImageConfig:
+        Command:
+          - 'app2.handler'
+        # EntryPoint:
+          # - '/usr/local/bin/python -m awslambdaric'
+        # WorkingDirectory: '/app'
+      Role: !GetAtt 'DrainInstanceLambdaRole.Arn'
+      Timeout: 300
+      Environment:
+        Variables:
+          DRAINING_TIMEOUT: 60
+      ReservedConcurrentExecutions: 1
+  DrainInstanceLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${DrainInstanceLambda}'
+      RetentionInDays: '14'
+  MulResource:
+    Type: "Custom::Summer"
+    Properties:
+      ServiceToken: !GetAtt 'DrainInstanceLambda.Arn'
+      No1: 2
+      No2: 3
+  SumResource:
+    Type: "Custom::Summer1"
+    Properties:
+      ServiceToken: !GetAtt 'DrainInstanceLambda1.Arn'
+      No1: 2
+      No2: 3
+  Eksctl:
+    Type: "Custom::Summer2"
+    Properties:
+      ServiceToken: !GetAtt 'DrainInstanceLambda2.Arn'
+Outputs:
+  StackName:
+    Description: 'Stack name.'
+    Value: !Sub '${AWS::StackName}'
+  Mul:
+    Value: !GetAtt MulResource.Mul
+  Sum:
+    Value: !GetAtt SumResource.Sum
+  Eks:
+    Value: !GetAtt Eksctl.Eks
