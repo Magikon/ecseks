@@ -14,6 +14,13 @@ Metadata:
         default: 'Cluster Parameters'
       Parameters:
       - ClusterName
+    - Label:
+        default: 'EC2 Parameters'
+      Parameters:
+      - SSHKeyName
+      - InstanceType
+      - MaxSize
+      - MinSize
 Rules:
   SubnetsInVPC:
     Assertions:
@@ -28,6 +35,26 @@ Parameters:
     Type: List<AWS::EC2::Subnet::Id>
   SubnetsPublic:
     Type: List<AWS::EC2::Subnet::Id>
+  SSHKeyName:
+    Description: 'Optional key pair of the ec2-user to establish a SSH connection to the EC2 instances of the EKS cluster.'
+    Type: String
+    Default: 'ec2-key'
+  InstanceType:
+    Description: 'The instance type of the EC2 instances of the ECS cluster.'
+    Type: String
+    Default: 't3.medium'
+  MaxSize:
+    Description: 'The maximum size of the Auto Scaling group.'
+    Type: Number
+    Default: 4
+    ConstraintDescription: 'Must be >= 1'
+    MinValue: 1
+  MinSize:
+    Description: 'The minimum size of the Auto Scaling group.'
+    Type: Number
+    Default: 1
+    ConstraintDescription: 'Must be >= 1'
+    MinValue: 1
 Mappings:
   ServicePrincipalPartitionMap:
     aws:
@@ -173,8 +200,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}/ServiceRole'
+#################################################################################################################
   RoleEndpoint:
     Type: 'AWS::IAM::Role'
+    DependsOn: ControlPlane
     Properties:
       AssumeRolePolicyDocument: !Sub 
         - |
@@ -189,8 +218,8 @@ Resources:
                 "Action": "sts:AssumeRoleWithWebIdentity",
                 "Condition": {
                    "StringEquals": {
-                      "${OidcProviderEndpoint}:sub": "system:serviceaccount:kube-system:aws-node", 
                       "${OidcProviderEndpoint}:aud": "sts.amazonaws.com"
+                      "${OidcProviderEndpoint}:sub": "system:serviceaccount:kube-system:aws-node", 
                     }
                   }
                 }
@@ -200,6 +229,590 @@ Resources:
           OidcProviderEndpoint: !Join [ "", [!Sub 'oidc.eks.${AWS::Region}.amazonaws.com/id/', !Select [0, !Split [".", !Select [1, !Split ["//", !GetAtt ControlPlane.Endpoint]]]]]]
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy'
+#################################################################################################################
+  GetCidrLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'lambda.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      PermissionsBoundary: !Ref 'AWS::NoValue'
+      Policies:
+      - PolicyName: draininstance
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ec2:DescribeVpcs'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
+  GetCidrLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          def handler(event, context):
+            responseData = {}
+            if event['RequestType'] == 'Delete':
+              responseData['Reason'] = "Success"
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "")
+            else:
+              try:
+                vpcid = event['ResourceProperties']['vpc']
+                ec2 = boto3.resource('ec2')
+                vpc = ec2.Vpc(id=vpcid)
+                responseData['Reason'] = "Success"
+                responseData['CIDR'] = vpc.cidr_block
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, vpc.cidr_block)
+              except Exception as e:
+                responseData['Reason'] = str(e)
+                cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "")
+      MemorySize: 128
+      Handler: 'index.handler'
+      Runtime: 'python3.7'
+      Role: !GetAtt 'GetCidrLambdaRole.Arn'
+      Timeout: 30
+      ReservedConcurrentExecutions: 1
+  CustomResourceVpcCidr:
+    Type: "Custom::vpccidr"
+    Properties:
+      ServiceToken: !GetAtt 'GetCidrLambda.Arn'
+      vpc: !Ref VPC
+#################################################################################################################
+  LaunchTemplate1:
+    Type: 'AWS::EC2::LaunchTemplate'
+    DependsOn: ControlPlane
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 80
+              VolumeType: gp2
+        KeyName: !Ref SSHKeyName
+        MetadataOptions:
+          HttpPutResponseHopLimit: 2
+          HttpTokens: optional
+        SecurityGroupIds:
+          - !GetAtt ControlPlane.ClusterSecurityGroupId
+          - !Ref SSH
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup1-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup1
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup1-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup1
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: network-interface
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup1-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup1
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+      LaunchTemplateName: !Sub '${ClusterName}/nodegroup1'
+  LaunchTemplate2:
+    Type: 'AWS::EC2::LaunchTemplate'
+    DependsOn: ControlPlane
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 80
+              VolumeType: gp2
+        KeyName: !Ref SSHKeyName
+        MetadataOptions:
+          HttpPutResponseHopLimit: 2
+          HttpTokens: optional
+        SecurityGroupIds:
+          - !GetAtt ControlPlane.ClusterSecurityGroupId
+          - !Ref SSH
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup2-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup2
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup2-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup2
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: network-interface
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup2-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup2
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+      LaunchTemplateName: !Sub '${ClusterName}/nodegroup2'
+  LaunchTemplate3:
+    Type: 'AWS::EC2::LaunchTemplate'
+    DependsOn: ControlPlane
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 80
+              VolumeType: gp2
+        KeyName: !Ref SSHKeyName
+        MetadataOptions:
+          HttpPutResponseHopLimit: 2
+          HttpTokens: optional
+        SecurityGroupIds:
+          - !GetAtt ControlPlane.ClusterSecurityGroupId
+          - !Ref SSH
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup3-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup3
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup3-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup3
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: network-interface
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup3-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup3
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+      LaunchTemplateName: !Sub '${ClusterName}/nodegroup3'
+  ManagedNodeGroup1:
+    Type: 'AWS::EKS::Nodegroup'
+    DependsOn: [ControlPlane, RoleEndpoint]
+    Properties:
+      AmiType: AL2_x86_64
+      ClusterName: !Ref ClusterName
+      InstanceTypes:
+        - !Ref InstanceType
+      Labels:
+        alpha.eksctl.io/cluster-name: !Ref ClusterName
+        alpha.eksctl.io/nodegroup-name: nodegroup1
+        enviroment: development
+      LaunchTemplate:
+        Id: !Ref LaunchTemplate1
+      NodeRole: !GetAtt NodeInstanceRole.Arn
+      NodegroupName: nodegroup1
+      ScalingConfig:
+        DesiredSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+        MinSize: !Ref MinSize
+      Subnets:
+        - !Select [ 0, !Ref SubnetsPrivate ]
+      Tags:
+        alpha.eksctl.io/nodegroup-name: nodegroup1
+        alpha.eksctl.io/nodegroup-type: managed
+        k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+  ManagedNodeGroup2:
+    Type: 'AWS::EKS::Nodegroup'
+    DependsOn: [ControlPlane, RoleEndpoint]
+    Properties:
+      AmiType: AL2_x86_64
+      ClusterName: !Ref ClusterName
+      InstanceTypes:
+        - !Ref InstanceType
+      Labels:
+        alpha.eksctl.io/cluster-name: !Ref ClusterName
+        alpha.eksctl.io/nodegroup-name: nodegroup2
+        enviroment: development
+      LaunchTemplate:
+        Id: !Ref LaunchTemplate2
+      NodeRole: !GetAtt NodeInstanceRole.Arn
+      NodegroupName: nodegroup2
+      ScalingConfig:
+        DesiredSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+        MinSize: !Ref MinSize
+      Subnets:
+        - !Select [ 1, !Ref SubnetsPrivate ]
+      Tags:
+        alpha.eksctl.io/nodegroup-name: nodegroup2
+        alpha.eksctl.io/nodegroup-type: managed
+        k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+  ManagedNodeGroup3:
+    Type: 'AWS::EKS::Nodegroup'
+    DependsOn: [ControlPlane, RoleEndpoint]
+    Properties:
+      AmiType: AL2_x86_64
+      ClusterName: !Ref ClusterName
+      InstanceTypes:
+        - !Ref InstanceType
+      Labels:
+        alpha.eksctl.io/cluster-name: !Ref ClusterName
+        alpha.eksctl.io/nodegroup-name: nodegroup3
+        enviroment: development
+      LaunchTemplate:
+        Id: !Ref LaunchTemplate3
+      NodeRole: !GetAtt NodeInstanceRole.Arn
+      NodegroupName: nodegroup3
+      ScalingConfig:
+        DesiredSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+        MinSize: !Ref MinSize
+      Subnets:
+        - !Select [ 2, !Ref SubnetsPrivate ]
+      Tags:
+        alpha.eksctl.io/nodegroup-name: nodegroup3
+        alpha.eksctl.io/nodegroup-type: managed
+        k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+  NodeInstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service:
+                - !FindInMap 
+                  - ServicePrincipalPartitionMap
+                  - !Ref 'AWS::Partition'
+                  - EC2
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - !Sub >-
+          arn:${AWS::Partition}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy'
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy'
+      Path: /
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}/NodeInstanceRole'
+  PolicyAWSLoadBalancerController:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'ec2:CreateTags'
+            Condition:
+              'Null':
+                'aws:RequestTag/elbv2.k8s.aws/cluster': 'false'
+              StringEquals:
+                'ec2:CreateAction': CreateSecurityGroup
+            Effect: Allow
+            Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
+          - Action:
+              - 'ec2:CreateTags'
+              - 'ec2:DeleteTags'
+            Condition:
+              'Null':
+                'aws:RequestTag/elbv2.k8s.aws/cluster': 'true'
+                'aws:ResourceTag/elbv2.k8s.aws/cluster': 'false'
+            Effect: Allow
+            Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
+          - Action:
+              - 'elasticloadbalancing:CreateLoadBalancer'
+              - 'elasticloadbalancing:CreateTargetGroup'
+            Condition:
+              'Null':
+                'aws:RequestTag/elbv2.k8s.aws/cluster': 'false'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'elasticloadbalancing:AddTags'
+              - 'elasticloadbalancing:RemoveTags'
+            Condition:
+              'Null':
+                'aws:RequestTag/elbv2.k8s.aws/cluster': 'true'
+                'aws:ResourceTag/elbv2.k8s.aws/cluster': 'false'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
+              - !Sub >-
+                arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/net/*/*
+              - !Sub >-
+                arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/app/*/*
+          - Action:
+              - 'elasticloadbalancing:AddTags'
+              - 'elasticloadbalancing:RemoveTags'
+            Effect: Allow
+            Resource:
+              - !Sub >-
+                arn:${AWS::Partition}:elasticloadbalancing:*:*:listener/net/*/*/*
+              - !Sub >-
+                arn:${AWS::Partition}:elasticloadbalancing:*:*:listener/app/*/*/*
+              - !Sub >-
+                arn:${AWS::Partition}:elasticloadbalancing:*:*:listener-rule/net/*/*/*
+              - !Sub >-
+                arn:${AWS::Partition}:elasticloadbalancing:*:*:listener-rule/app/*/*/*
+          - Action:
+              - 'ec2:AuthorizeSecurityGroupIngress'
+              - 'ec2:RevokeSecurityGroupIngress'
+              - 'ec2:DeleteSecurityGroup'
+              - 'elasticloadbalancing:ModifyLoadBalancerAttributes'
+              - 'elasticloadbalancing:SetIpAddressType'
+              - 'elasticloadbalancing:SetSecurityGroups'
+              - 'elasticloadbalancing:SetSubnets'
+              - 'elasticloadbalancing:DeleteLoadBalancer'
+              - 'elasticloadbalancing:ModifyTargetGroup'
+              - 'elasticloadbalancing:ModifyTargetGroupAttributes'
+              - 'elasticloadbalancing:DeleteTargetGroup'
+            Condition:
+              'Null':
+                'aws:ResourceTag/elbv2.k8s.aws/cluster': 'false'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'elasticloadbalancing:RegisterTargets'
+              - 'elasticloadbalancing:DeregisterTargets'
+            Effect: Allow
+            Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
+          - Action:
+              - 'iam:CreateServiceLinkedRole'
+              - 'ec2:DescribeAccountAttributes'
+              - 'ec2:DescribeAddresses'
+              - 'ec2:DescribeAvailabilityZones'
+              - 'ec2:DescribeInternetGateways'
+              - 'ec2:DescribeVpcs'
+              - 'ec2:DescribeSubnets'
+              - 'ec2:DescribeSecurityGroups'
+              - 'ec2:DescribeInstances'
+              - 'ec2:DescribeNetworkInterfaces'
+              - 'ec2:DescribeTags'
+              - 'ec2:DescribeVpcPeeringConnections'
+              - 'elasticloadbalancing:DescribeLoadBalancers'
+              - 'elasticloadbalancing:DescribeLoadBalancerAttributes'
+              - 'elasticloadbalancing:DescribeListeners'
+              - 'elasticloadbalancing:DescribeListenerCertificates'
+              - 'elasticloadbalancing:DescribeSSLPolicies'
+              - 'elasticloadbalancing:DescribeRules'
+              - 'elasticloadbalancing:DescribeTargetGroups'
+              - 'elasticloadbalancing:DescribeTargetGroupAttributes'
+              - 'elasticloadbalancing:DescribeTargetHealth'
+              - 'elasticloadbalancing:DescribeTags'
+              - 'cognito-idp:DescribeUserPoolClient'
+              - 'acm:ListCertificates'
+              - 'acm:DescribeCertificate'
+              - 'iam:ListServerCertificates'
+              - 'iam:GetServerCertificate'
+              - 'waf-regional:GetWebACL'
+              - 'waf-regional:GetWebACLForResource'
+              - 'waf-regional:AssociateWebACL'
+              - 'waf-regional:DisassociateWebACL'
+              - 'wafv2:GetWebACL'
+              - 'wafv2:GetWebACLForResource'
+              - 'wafv2:AssociateWebACL'
+              - 'wafv2:DisassociateWebACL'
+              - 'shield:GetSubscriptionState'
+              - 'shield:DescribeProtection'
+              - 'shield:CreateProtection'
+              - 'shield:DeleteProtection'
+              - 'ec2:AuthorizeSecurityGroupIngress'
+              - 'ec2:RevokeSecurityGroupIngress'
+              - 'ec2:CreateSecurityGroup'
+              - 'elasticloadbalancing:CreateListener'
+              - 'elasticloadbalancing:DeleteListener'
+              - 'elasticloadbalancing:CreateRule'
+              - 'elasticloadbalancing:DeleteRule'
+              - 'elasticloadbalancing:SetWebAcl'
+              - 'elasticloadbalancing:ModifyListener'
+              - 'elasticloadbalancing:AddListenerCertificates'
+              - 'elasticloadbalancing:RemoveListenerCertificates'
+              - 'elasticloadbalancing:ModifyRule'
+            Effect: Allow
+            Resource: '*'
+        Version: 2012-10-17
+      PolicyName: !Sub '${AWS::StackName}-PolicyAWSLoadBalancerController'
+      Roles:
+        - !Ref NodeInstanceRole
+  PolicyAutoScaling:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'autoscaling:DescribeAutoScalingGroups'
+              - 'autoscaling:DescribeAutoScalingInstances'
+              - 'autoscaling:DescribeLaunchConfigurations'
+              - 'autoscaling:DescribeTags'
+              - 'autoscaling:SetDesiredCapacity'
+              - 'autoscaling:TerminateInstanceInAutoScalingGroup'
+              - 'ec2:DescribeInstanceTypes'
+              - 'ec2:DescribeLaunchTemplateVersions'
+            Effect: Allow
+            Resource: '*'
+        Version: 2012-10-17
+      PolicyName: !Sub '${AWS::StackName}-PolicyAutoScaling'
+      Roles:
+        - !Ref NodeInstanceRole
+  PolicyEBS:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'ec2:CreateSnapshot'
+              - 'ec2:AttachVolume'
+              - 'ec2:DetachVolume'
+              - 'ec2:ModifyVolume'
+              - 'ec2:DescribeAvailabilityZones'
+              - 'ec2:DescribeInstances'
+              - 'ec2:DescribeSnapshots'
+              - 'ec2:DescribeTags'
+              - 'ec2:DescribeVolumes'
+              - 'ec2:DescribeVolumesModifications'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'ec2:CreateTags'
+            Condition:
+              StringEquals:
+                'ec2:CreateAction':
+                  - CreateVolume
+                  - CreateSnapshot
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:ec2:*:*:volume/*'
+              - !Sub 'arn:${AWS::Partition}:ec2:*:*:snapshot/*'
+          - Action:
+              - 'ec2:DeleteTags'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:ec2:*:*:volume/*'
+              - !Sub 'arn:${AWS::Partition}:ec2:*:*:snapshot/*'
+          - Action:
+              - 'ec2:CreateVolume'
+            Condition:
+              StringLike:
+                'aws:RequestTag/ebs.csi.aws.com/cluster': 'true'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'ec2:CreateVolume'
+            Condition:
+              StringLike:
+                'aws:RequestTag/CSIVolumeName': '*'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'ec2:CreateVolume'
+            Condition:
+              StringLike:
+                'aws:RequestTag/kubernetes.io/cluster/*': owned
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'ec2:DeleteVolume'
+            Condition:
+              StringLike:
+                'ec2:ResourceTag/ebs.csi.aws.com/cluster': 'true'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'ec2:DeleteVolume'
+            Condition:
+              StringLike:
+                'ec2:ResourceTag/CSIVolumeName': '*'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'ec2:DeleteVolume'
+            Condition:
+              StringLike:
+                'ec2:ResourceTag/kubernetes.io/cluster/*': owned
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'ec2:DeleteSnapshot'
+            Condition:
+              StringLike:
+                'ec2:ResourceTag/CSIVolumeSnapshotName': '*'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'ec2:DeleteSnapshot'
+            Condition:
+              StringLike:
+                'ec2:ResourceTag/ebs.csi.aws.com/cluster': 'true'
+            Effect: Allow
+            Resource: '*'
+        Version: 2012-10-17
+      PolicyName: !Sub '${AWS::StackName}-PolicyEBS'
+      Roles:
+        - !Ref NodeInstanceRole
+  SSH:
+    Type: 'AWS::EC2::SecurityGroup'
+    DependsOn: ControlPlane
+    Properties:
+      GroupDescription: Allow SSH access
+      GroupName: !Sub '${AWS::StackName}-remoteAccess'
+      SecurityGroupIngress:
+        - CidrIp: !GetAtt CustomResourceVpcCidr.CIDR
+          Description: >-
+            Allow SSH access to managed worker nodes in group nodegroup
+            (private, only inside VPC)
+          FromPort: 22
+          IpProtocol: tcp
+          ToPort: 22
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}/SSH'
+      VpcId: !Ref VPC
+###################################################################################################################
 Outputs:
   ARN:
     Value: !GetAtt 
@@ -252,3 +865,6 @@ Outputs:
     Value: !Join [ "", [!Sub 'oidc.eks.${AWS::Region}.amazonaws.com/id/', !Select [0, !Split [".", !Select [1, !Split ["//", !GetAtt ControlPlane.Endpoint]]]]]]
   RoleEndpoint:
     Value: !GetAtt RoleEndpoint.Arn
+  VPCCidr:
+    Description: 'Return value of vpc cidr'
+    Value: !GetAtt CustomResourceVpcCidr.CIDR

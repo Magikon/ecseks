@@ -15,7 +15,7 @@ Mappings:
       EKS: eks.amazonaws.com
       EKSFargatePods: eks-fargate-pods.amazonaws.com
 Resources:
-  LaunchTemplate:
+  LaunchTemplate1:
     Type: 'AWS::EC2::LaunchTemplate'
     Properties:
       LaunchTemplateData:
@@ -24,20 +24,20 @@ Resources:
             Ebs:
               VolumeSize: 80
               VolumeType: gp2
-        KeyName: ec2-key
+        KeyName: !Ref SSHKeyName
         MetadataOptions:
           HttpPutResponseHopLimit: 2
           HttpTokens: optional
         SecurityGroupIds:
-          - !ImportValue 'eksctl-zerosystems-cluster-cluster::ClusterSecurityGroupId'
+          - !GetAtt ControlPlane.ClusterSecurityGroupId
           - !Ref SSH
         TagSpecifications:
           - ResourceType: instance
             Tags:
               - Key: Name
-                Value: zerosystems-cluster-nodegroup1b-Node
+                Value: !Sub '${ClusterName}-nodegroup1-Node'
               - Key: alpha.eksctl.io/nodegroup-name
-                Value: nodegroup1b
+                Value: nodegroup1
               - Key: alpha.eksctl.io/nodegroup-type
                 Value: managed
               - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
@@ -45,9 +45,9 @@ Resources:
           - ResourceType: volume
             Tags:
               - Key: Name
-                Value: zerosystems-cluster-nodegroup1b-Node
+                Value: !Sub '${ClusterName}-nodegroup1-Node'
               - Key: alpha.eksctl.io/nodegroup-name
-                Value: nodegroup1b
+                Value: nodegroup1
               - Key: alpha.eksctl.io/nodegroup-type
                 Value: managed
               - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
@@ -55,39 +55,189 @@ Resources:
           - ResourceType: network-interface
             Tags:
               - Key: Name
-                Value: zerosystems-cluster-nodegroup1b-Node
+                Value: !Sub '${ClusterName}-nodegroup1-Node'
               - Key: alpha.eksctl.io/nodegroup-name
-                Value: nodegroup1b
+                Value: nodegroup1
               - Key: alpha.eksctl.io/nodegroup-type
                 Value: managed
               - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
                 Value: development
-      LaunchTemplateName: !Sub '${AWS::StackName}'
-  ManagedNodeGroup:
+      LaunchTemplateName: !Sub '${ClusterName}/nodegroup1'
+  LaunchTemplate2:
+    Type: 'AWS::EC2::LaunchTemplate'
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 80
+              VolumeType: gp2
+        KeyName: !Ref SSHKeyName
+        MetadataOptions:
+          HttpPutResponseHopLimit: 2
+          HttpTokens: optional
+        SecurityGroupIds:
+          - !GetAtt ControlPlane.ClusterSecurityGroupId
+          - !Ref SSH
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup2-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup2
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup2-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup2
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: network-interface
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup2-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup2
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+      LaunchTemplateName: !Sub '${ClusterName}/nodegroup2'
+  LaunchTemplate3:
+    Type: 'AWS::EC2::LaunchTemplate'
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 80
+              VolumeType: gp2
+        KeyName: !Ref SSHKeyName
+        MetadataOptions:
+          HttpPutResponseHopLimit: 2
+          HttpTokens: optional
+        SecurityGroupIds:
+          - !GetAtt ControlPlane.ClusterSecurityGroupId
+          - !Ref SSH
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup3-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup3
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup3-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup3
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+          - ResourceType: network-interface
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-nodegroup3-Node'
+              - Key: alpha.eksctl.io/nodegroup-name
+                Value: nodegroup3
+              - Key: alpha.eksctl.io/nodegroup-type
+                Value: managed
+              - Key: k8s.io/cluster-autoscaler/node-template/label/enviroment
+                Value: development
+      LaunchTemplateName: !Sub '${ClusterName}/nodegroup3'
+  ManagedNodeGroup1:
     Type: 'AWS::EKS::Nodegroup'
     Properties:
       AmiType: AL2_x86_64
-      ClusterName: zerosystems-cluster
+      ClusterName: !Ref ClusterName
       InstanceTypes:
-        - t3.medium
+        - !Ref InstanceType
       Labels:
-        alpha.eksctl.io/cluster-name: zerosystems-cluster
-        alpha.eksctl.io/nodegroup-name: nodegroup1b
+        alpha.eksctl.io/cluster-name: !Ref ClusterName
+        alpha.eksctl.io/nodegroup-name: nodegroup1
         enviroment: development
       LaunchTemplate:
-        Id: !Ref LaunchTemplate
+        Id: !Ref LaunchTemplate1
       NodeRole: !GetAtt 
         - NodeInstanceRole
         - Arn
-      NodegroupName: nodegroup1b
+      NodegroupName: nodegroup1
       ScalingConfig:
-        DesiredSize: 1
-        MaxSize: 2
-        MinSize: 1
+        DesiredSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+        MinSize: !Ref MinSize
       Subnets:
-        - subnet-028265a6c8ff0651a
+        - !Select [ 0, !Ref SubnetsPrivate ]
       Tags:
-        alpha.eksctl.io/nodegroup-name: nodegroup1b
+        alpha.eksctl.io/nodegroup-name: nodegroup1
+        alpha.eksctl.io/nodegroup-type: managed
+        k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+  ManagedNodeGroup2:
+    Type: 'AWS::EKS::Nodegroup'
+    Properties:
+      AmiType: AL2_x86_64
+      ClusterName: !Ref ClusterName
+      InstanceTypes:
+        - !Ref InstanceType
+      Labels:
+        alpha.eksctl.io/cluster-name: !Ref ClusterName
+        alpha.eksctl.io/nodegroup-name: nodegroup2
+        enviroment: development
+      LaunchTemplate:
+        Id: !Ref LaunchTemplate2
+      NodeRole: !GetAtt 
+        - NodeInstanceRole
+        - Arn
+      NodegroupName: nodegroup2
+      ScalingConfig:
+        DesiredSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+        MinSize: !Ref MinSize
+      Subnets:
+        - !Select [ 1, !Ref SubnetsPrivate ]
+      Tags:
+        alpha.eksctl.io/nodegroup-name: nodegroup2
+        alpha.eksctl.io/nodegroup-type: managed
+        k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+  ManagedNodeGroup3:
+    Type: 'AWS::EKS::Nodegroup'
+    Properties:
+      AmiType: AL2_x86_64
+      ClusterName: !Ref ClusterName
+      InstanceTypes:
+        - !Ref InstanceType
+      Labels:
+        alpha.eksctl.io/cluster-name: !Ref ClusterName
+        alpha.eksctl.io/nodegroup-name: nodegroup3
+        enviroment: development
+      LaunchTemplate:
+        Id: !Ref LaunchTemplate3
+      NodeRole: !GetAtt 
+        - NodeInstanceRole
+        - Arn
+      NodegroupName: nodegroup3
+      ScalingConfig:
+        DesiredSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+        MinSize: !Ref MinSize
+      Subnets:
+        - !Select [ 2, !Ref SubnetsPrivate ]
+      Tags:
+        alpha.eksctl.io/nodegroup-name: nodegroup3
         alpha.eksctl.io/nodegroup-type: managed
         k8s.io/cluster-autoscaler/node-template/label/enviroment: development
   NodeInstanceRole:
@@ -374,7 +524,7 @@ Resources:
       GroupDescription: Allow SSH access
       GroupName: !Sub '${AWS::StackName}-remoteAccess'
       SecurityGroupIngress:
-        - CidrIp: 10.8.0.0/16
+        - CidrIp: !GetAtt CustomResourceVpcCidr.CIDR
           Description: >-
             Allow SSH access to managed worker nodes in group nodegroup1b
             (private, only inside VPC)
@@ -384,4 +534,4 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}/SSH'
-      VpcId: !ImportValue 'eksctl-zerosystems-cluster-cluster::VPC'
+      VpcId: !Ref VPC
