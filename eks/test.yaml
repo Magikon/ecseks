@@ -314,14 +314,15 @@ Resources:
       UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash -ex
-          # trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}' ERR
+          trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}' ERR
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}
-          eksctl create cluster -f /root/eksconfig.yaml
-          # /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}
-    # CreationPolicy:
-      # ResourceSignal:
-        # Timeout: PT9M
+          # eksctl create cluster -f /root/eksconfig.yaml
+          # eksctl get iamidentitymapping --cluster zero --region=us-east-1
+          /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
   InstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:

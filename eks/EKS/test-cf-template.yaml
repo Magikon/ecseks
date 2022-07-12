@@ -467,82 +467,109 @@ Resources:
   # Worker nodes (auto-scaling group)
   #============================================================================#
 
-  WorkerNodesAutoScalingGroup1:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    UpdatePolicy:
-      AutoScalingRollingUpdate:
-        MinInstancesInService: 1
-        MaxBatchSize: 1
-    Properties:
-      LaunchConfigurationName: !Ref WorkerNodesLaunchConfiguration1
-      MinSize: !Ref MinSize
-      MaxSize: !Ref MaxSize
-      VPCZoneIdentifier:
-        - !Select [ 0, !Ref SubnetsPrivate ]
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-WorkerNodesAutoScalingGroup1"
-          PropagateAtLaunch: true
-        # Without this tag, worker nodes are unable to join the cluster:
-        - Key: !Sub "kubernetes.io/cluster/${ControlPlane}"
-          Value: "owned"
-          PropagateAtLaunch: true
-  WorkerNodesAutoScalingGroup2:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    UpdatePolicy:
-      AutoScalingRollingUpdate:
-        MinInstancesInService: 1
-        MaxBatchSize: 1
-    Properties:
-      LaunchConfigurationName: !Ref WorkerNodesLaunchConfiguration2
-      MinSize: !Ref MinSize
-      MaxSize: !Ref MaxSize
-      VPCZoneIdentifier:
-        - !Select [ 1, !Ref SubnetsPrivate ]
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-WorkerNodesAutoScalingGroup2"
-          PropagateAtLaunch: true
-        # Without this tag, worker nodes are unable to join the cluster:
-        - Key: !Sub "kubernetes.io/cluster/${ControlPlane}"
-          Value: "owned"
-          PropagateAtLaunch: true
-  WorkerNodesAutoScalingGroup3:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    UpdatePolicy:
-      AutoScalingRollingUpdate:
-        MinInstancesInService: 1
-        MaxBatchSize: 1
-    Properties:
-      LaunchConfigurationName: !Ref WorkerNodesLaunchConfiguration3
-      MinSize: !Ref MinSize
-      MaxSize: !Ref MaxSize
-      VPCZoneIdentifier:
-        - !Select [ 2, !Ref SubnetsPrivate ]
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-WorkerNodesAutoScalingGroup3"
-          PropagateAtLaunch: true
-        # Without this tag, worker nodes are unable to join the cluster:
-        - Key: !Sub "kubernetes.io/cluster/${ControlPlane}"
-          Value: "owned"
-          PropagateAtLaunch: true
+  # WorkerNodesAutoScalingGroup1:
+    # Type: AWS::AutoScaling::AutoScalingGroup
+    # UpdatePolicy:
+      # AutoScalingRollingUpdate:
+        # MinInstancesInService: 1
+        # MaxBatchSize: 1
+    # Properties:
+      # LaunchConfigurationName: !Ref WorkerNodesLaunchConfiguration1
+      # MinSize: !Ref MinSize
+      # MaxSize: !Ref MaxSize
+      # VPCZoneIdentifier:
+        # - !Select [ 0, !Ref SubnetsPrivate ]
+      # Tags:
+        # - Key: Name
+          # Value: !Sub "${AWS::StackName}-WorkerNodesAutoScalingGroup1"
+          # PropagateAtLaunch: true
+        # # Without this tag, worker nodes are unable to join the cluster:
+        # - Key: !Sub "kubernetes.io/cluster/${ControlPlane}"
+          # Value: "owned"
+          # PropagateAtLaunch: true
+  # WorkerNodesAutoScalingGroup2:
+    # Type: AWS::AutoScaling::AutoScalingGroup
+    # UpdatePolicy:
+      # AutoScalingRollingUpdate:
+        # MinInstancesInService: 1
+        # MaxBatchSize: 1
+    # Properties:
+      # LaunchConfigurationName: !Ref WorkerNodesLaunchConfiguration2
+      # MinSize: !Ref MinSize
+      # MaxSize: !Ref MaxSize
+      # VPCZoneIdentifier:
+        # - !Select [ 1, !Ref SubnetsPrivate ]
+      # Tags:
+        # - Key: Name
+          # Value: !Sub "${AWS::StackName}-WorkerNodesAutoScalingGroup2"
+          # PropagateAtLaunch: true
+        # # Without this tag, worker nodes are unable to join the cluster:
+        # - Key: !Sub "kubernetes.io/cluster/${ControlPlane}"
+          # Value: "owned"
+          # PropagateAtLaunch: true
+  # WorkerNodesAutoScalingGroup3:
+    # Type: AWS::AutoScaling::AutoScalingGroup
+    # UpdatePolicy:
+      # AutoScalingRollingUpdate:
+        # MinInstancesInService: 1
+        # MaxBatchSize: 1
+    # Properties:
+      # LaunchConfigurationName: !Ref WorkerNodesLaunchConfiguration3
+      # MinSize: !Ref MinSize
+      # MaxSize: !Ref MaxSize
+      # VPCZoneIdentifier:
+        # - !Select [ 2, !Ref SubnetsPrivate ]
+      # Tags:
+        # - Key: Name
+          # Value: !Sub "${AWS::StackName}-WorkerNodesAutoScalingGroup3"
+          # PropagateAtLaunch: true
+        # # Without this tag, worker nodes are unable to join the cluster:
+        # - Key: !Sub "kubernetes.io/cluster/${ControlPlane}"
+          # Value: "owned"
+          # PropagateAtLaunch: true
           
 
   # IMPORTANT NOTE: We have to define NodeGroup (type: AWS::EKS::Nodegroup), without this no woker nodes will be attach to cluster
+  # WorkerLaunchTemplate:
+    # Type: AWS::EC2::LaunchTemplate
+    # Properties: 
+      # LaunchTemplateName: 'WorkerLaunchTemplate'
+      # LaunchTemplateData: 
+        # Monitoring: 
+          # Enabled: true
+        # # IamInstanceProfile:
+          # # Arn: !GetAtt WorkerNodesInstanceProfile.Arn
+        # ImageId: !FindInMap
+          # - EksAmiIds
+          # - !Ref AWS::Region
+          # - Standard
+        # InstanceType: !Ref InstanceType
+        # KeyName: !Ref SSHKeyName
+        # UserData:
+          # Fn::Base64: !Sub |
+              # #!/bin/bash
+              # set -o xtrace
+              # /etc/eks/bootstrap.sh ${ControlPlane}
+              # /opt/aws/bin/cfn-signal \
+                              # --exit-code $? \
+                              # --stack  ${AWS::StackName} \
+                              # --resource WorkerNodeGroup1 \
+                              # --region ${AWS::Region}
   WorkerNodegroup1:
     Type: AWS::EKS::Nodegroup
     DependsOn: ControlPlane
     Properties:
       ClusterName: !Ref ClusterName
+      AmiType: 'AL2_x86_64'
       NodeRole: !GetAtt WorkerNodesRole.Arn
+      RemoteAccess:
+        Ec2SshKey: !Ref SSHKeyName
+        SourceSecurityGroups: 
+          - !Ref WorkerNodesSecurityGroup
       ScalingConfig:
-        MinSize:
-          Ref: MinSize
-        DesiredSize:
-          Ref: MinSize
-        MaxSize:
-          Ref: MaxSize
+        MinSize: !Ref MinSize
+        DesiredSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
       Subnets:
         - !Select [ 0, !Ref SubnetsPrivate ]
       Tags:
@@ -553,14 +580,16 @@ Resources:
     DependsOn: ControlPlane
     Properties:
       ClusterName: !Ref ClusterName
+      AmiType: 'AL2_x86_64'
       NodeRole: !GetAtt WorkerNodesRole.Arn
+      RemoteAccess:
+        Ec2SshKey: !Ref SSHKeyName
+        SourceSecurityGroups: 
+          - !Ref WorkerNodesSecurityGroup
       ScalingConfig:
-        MinSize:
-          Ref: MinSize
-        DesiredSize:
-          Ref: MinSize
-        MaxSize:
-          Ref: MaxSize
+        MinSize: !Ref MinSize
+        DesiredSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
       Subnets:
         - !Select [ 1, !Ref SubnetsPrivate ]
       Tags:
@@ -571,114 +600,116 @@ Resources:
     DependsOn: ControlPlane
     Properties:
       ClusterName: !Ref ClusterName
+      AmiType: 'AL2_x86_64'
       NodeRole: !GetAtt WorkerNodesRole.Arn
+      RemoteAccess:
+        Ec2SshKey: !Ref SSHKeyName
+        SourceSecurityGroups: 
+          - !Ref WorkerNodesSecurityGroup
       ScalingConfig:
-        MinSize:
-          Ref: MinSize
-        DesiredSize:
-          Ref: MinSize
-        MaxSize:
-          Ref: MaxSize
+        MinSize: !Ref MinSize
+        DesiredSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
       Subnets:
         - !Select [ 2, !Ref SubnetsPrivate ]
       Tags:
         alpha.eksctl.io/nodegroup-name: WorkerNodegroup3
         alpha.eksctl.io/nodegroup-type: managed
-  WorkerNodesLaunchConfiguration1:
-    Type: AWS::AutoScaling::LaunchConfiguration
-    # Wait until cluster is ready before launching worker nodes
-    DependsOn: ControlPlane
-    Properties:
-      AssociatePublicIpAddress: false
-      IamInstanceProfile: !Ref WorkerNodesInstanceProfile
-      ImageId: !FindInMap
-        - EksAmiIds
-        - !Ref AWS::Region
-        - Standard
-      InstanceType: !Ref InstanceType
-      KeyName: !Ref SSHKeyName
-      SecurityGroups:
-        - !Ref WorkerNodesSecurityGroup
+  # WorkerNodesLaunchConfiguration1:
+    # Type: AWS::AutoScaling::LaunchConfiguration
+    # # Wait until cluster is ready before launching worker nodes
+    # DependsOn: ControlPlane
+    # Properties:
+      # AssociatePublicIpAddress: false
+      # IamInstanceProfile: !Ref WorkerNodesInstanceProfile
+      # ImageId: !FindInMap
+        # - EksAmiIds
+        # - !Ref AWS::Region
+        # - Standard
+      # InstanceType: !Ref InstanceType
+      # KeyName: !Ref SSHKeyName
+      # SecurityGroups:
+        # - !Ref WorkerNodesSecurityGroup
 
-      # IMPORTANT NOTE: This code bootstrap some cfn settings on our ec2 machine, it require some parameters like
-      # --stack <AWS::StackName>, --resource <NodeGroupName>, --region <AWS::region>
-      # /usr/bin/ping -c 5 google.com ( To ensure that our node have internet connectivity via NATGateway )
-      UserData:
-        Fn::Base64: !Sub |
-            #!/bin/bash
-            set -o xtrace
-            /etc/eks/bootstrap.sh ${ControlPlane}
-            /opt/aws/bin/cfn-signal \
-                            --exit-code $? \
-                            --stack  ${AWS::StackName} \
-                            --resource WorkerNodeGroup1 \
-                            --region ${AWS::Region}
-            /usr/bin/ping -c 5 google.com 
-  WorkerNodesLaunchConfiguration2:
-    Type: AWS::AutoScaling::LaunchConfiguration
-    # Wait until cluster is ready before launching worker nodes
-    DependsOn: ControlPlane
-    Properties:
-      AssociatePublicIpAddress: false
-      IamInstanceProfile: !Ref WorkerNodesInstanceProfile
-      ImageId: !FindInMap
-        - EksAmiIds
-        - !Ref AWS::Region
-        - Standard
-      InstanceType: !Ref InstanceType
-      KeyName: !Ref SSHKeyName
-      SecurityGroups:
-        - !Ref WorkerNodesSecurityGroup
+      # # IMPORTANT NOTE: This code bootstrap some cfn settings on our ec2 machine, it require some parameters like
+      # # --stack <AWS::StackName>, --resource <NodeGroupName>, --region <AWS::region>
+      # # /usr/bin/ping -c 5 google.com ( To ensure that our node have internet connectivity via NATGateway )
+      # UserData:
+        # Fn::Base64: !Sub |
+            # #!/bin/bash
+            # set -o xtrace
+            # /etc/eks/bootstrap.sh ${ControlPlane}
+            # /opt/aws/bin/cfn-signal \
+                            # --exit-code $? \
+                            # --stack  ${AWS::StackName} \
+                            # --resource WorkerNodeGroup1 \
+                            # --region ${AWS::Region}
+            # /usr/bin/ping -c 5 google.com 
+  # WorkerNodesLaunchConfiguration2:
+    # Type: AWS::AutoScaling::LaunchConfiguration
+    # # Wait until cluster is ready before launching worker nodes
+    # DependsOn: ControlPlane
+    # Properties:
+      # AssociatePublicIpAddress: false
+      # IamInstanceProfile: !Ref WorkerNodesInstanceProfile
+      # ImageId: !FindInMap
+        # - EksAmiIds
+        # - !Ref AWS::Region
+        # - Standard
+      # InstanceType: !Ref InstanceType
+      # KeyName: !Ref SSHKeyName
+      # SecurityGroups:
+        # - !Ref WorkerNodesSecurityGroup
 
-      # IMPORTANT NOTE: This code bootstrap some cfn settings on our ec2 machine, it require some parameters like
-      # --stack <AWS::StackName>, --resource <NodeGroupName>, --region <AWS::region>
-      # /usr/bin/ping -c 5 google.com ( To ensure that our node have internet connectivity via NATGateway )
-      UserData:
-        Fn::Base64: !Sub |
-            #!/bin/bash
-            set -o xtrace
-            /etc/eks/bootstrap.sh ${ControlPlane}
-            /opt/aws/bin/cfn-signal \
-                            --exit-code $? \
-                            --stack  ${AWS::StackName} \
-                            --resource WorkerNodeGroup2 \
-                            --region ${AWS::Region}
-            /usr/bin/ping -c 5 google.com 
-  WorkerNodesLaunchConfiguration3:
-    Type: AWS::AutoScaling::LaunchConfiguration
-    # Wait until cluster is ready before launching worker nodes
-    DependsOn: ControlPlane
-    Properties:
-      AssociatePublicIpAddress: false
-      IamInstanceProfile: !Ref WorkerNodesInstanceProfile
-      ImageId: !FindInMap
-        - EksAmiIds
-        - !Ref AWS::Region
-        - Standard
-      InstanceType: !Ref InstanceType
-      KeyName: !Ref SSHKeyName
-      SecurityGroups:
-        - !Ref WorkerNodesSecurityGroup
+      # # IMPORTANT NOTE: This code bootstrap some cfn settings on our ec2 machine, it require some parameters like
+      # # --stack <AWS::StackName>, --resource <NodeGroupName>, --region <AWS::region>
+      # # /usr/bin/ping -c 5 google.com ( To ensure that our node have internet connectivity via NATGateway )
+      # UserData:
+        # Fn::Base64: !Sub |
+            # #!/bin/bash
+            # set -o xtrace
+            # /etc/eks/bootstrap.sh ${ControlPlane}
+            # /opt/aws/bin/cfn-signal \
+                            # --exit-code $? \
+                            # --stack  ${AWS::StackName} \
+                            # --resource WorkerNodeGroup2 \
+                            # --region ${AWS::Region}
+            # /usr/bin/ping -c 5 google.com 
+  # WorkerNodesLaunchConfiguration3:
+    # Type: AWS::AutoScaling::LaunchConfiguration
+    # # Wait until cluster is ready before launching worker nodes
+    # DependsOn: ControlPlane
+    # Properties:
+      # AssociatePublicIpAddress: false
+      # IamInstanceProfile: !Ref WorkerNodesInstanceProfile
+      # ImageId: !FindInMap
+        # - EksAmiIds
+        # - !Ref AWS::Region
+        # - Standard
+      # InstanceType: !Ref InstanceType
+      # KeyName: !Ref SSHKeyName
+      # SecurityGroups:
+        # - !Ref WorkerNodesSecurityGroup
 
-      # IMPORTANT NOTE: This code bootstrap some cfn settings on our ec2 machine, it require some parameters like
-      # --stack <AWS::StackName>, --resource <NodeGroupName>, --region <AWS::region>
-      # /usr/bin/ping -c 5 google.com ( To ensure that our node have internet connectivity via NATGateway )
-      UserData:
-        Fn::Base64: !Sub |
-            #!/bin/bash
-            set -o xtrace
-            /etc/eks/bootstrap.sh ${ControlPlane}
-            /opt/aws/bin/cfn-signal \
-                            --exit-code $? \
-                            --stack  ${AWS::StackName} \
-                            --resource WorkerNodeGroup3 \
-                            --region ${AWS::Region}
-            /usr/bin/ping -c 5 google.com 
-  WorkerNodesInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Roles:
-        - !Ref WorkerNodesRole
+      # # IMPORTANT NOTE: This code bootstrap some cfn settings on our ec2 machine, it require some parameters like
+      # # --stack <AWS::StackName>, --resource <NodeGroupName>, --region <AWS::region>
+      # # /usr/bin/ping -c 5 google.com ( To ensure that our node have internet connectivity via NATGateway )
+      # UserData:
+        # Fn::Base64: !Sub |
+            # #!/bin/bash
+            # set -o xtrace
+            # /etc/eks/bootstrap.sh ${ControlPlane}
+            # /opt/aws/bin/cfn-signal \
+                            # --exit-code $? \
+                            # --stack  ${AWS::StackName} \
+                            # --resource WorkerNodeGroup3 \
+                            # --region ${AWS::Region}
+            # /usr/bin/ping -c 5 google.com 
+  # WorkerNodesInstanceProfile:
+    # Type: AWS::IAM::InstanceProfile
+    # Properties:
+      # Roles:
+        # - !Ref WorkerNodesRole
 #################################################################################################################
   WorkerNodesRole:
     Type: 'AWS::IAM::Role'
