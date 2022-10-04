@@ -1,0 +1,1141 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ECS: Cluster template with service'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Cluster Parameters'
+      Parameters:
+      - ClusterName
+    - Label:
+        default: 'VPC Parameters'
+      Parameters:
+      - VPC
+      - SubnetsPrivate
+      - SubnetsPublic
+    - Label:
+        default: 'EC2 Parameters'
+      Parameters:
+      - InstanceType
+      - MaxSize
+      - MinSize
+    - Label:
+        default: 'Load Balancer Parameters'
+      Parameters:
+      - LoadBalancerScheme
+      - LoadBalancerCertificateArn
+    - Label:
+        default: 'Service Parameters'
+      Parameters:
+      - AutoScaling
+      - DesiredCount
+      - MaxCapacity
+      - MinCapacity
+    - Label:
+        default: 'Task Parameters'
+      Parameters:
+      - Image
+      - Secret
+Parameters:
+  ClusterName:
+    Description: 'Determine the name of the ECS cluster.'
+    Type: String
+    Default: zerosystems
+  VPC:
+    Description: 'Select the VPC where the cluster will be created.'
+    Type: AWS::EC2::VPC::Id
+  SubnetsPrivate:
+    Description: 'Select Private Subnets of selected VPC.'
+    Type: List<AWS::EC2::Subnet::Id>
+  SubnetsPublic:
+    Description: 'Select Public Subnets of selected VPC.'
+    Type: List<AWS::EC2::Subnet::Id>
+  LoadBalancerScheme:
+    Description: 'Indicates whether the load balancer in front of the ECS cluster is internet-facing or internal.'
+    Type: String
+    Default: 'internet-facing'
+    AllowedValues:
+    - 'internet-facing'
+    - internal
+  LoadBalancerCertificateArn:
+    Description: 'Optional Amazon Resource Name (ARN) of the certificate to associate with the load balancer.'
+    Type: String
+    Default: ''
+  InstanceType:
+    Description: 'The instance type of the EC2 instances of the ECS cluster.'
+    Type: String
+    Default: 't2.micro'
+  MaxSize:
+    Description: 'The maximum size of the Auto Scaling group.'
+    Type: Number
+    Default: 4
+    ConstraintDescription: 'Must be >= 1'
+    MinValue: 1
+  MinSize:
+    Description: 'The minimum size of the Auto Scaling group.'
+    Type: Number
+    Default: 1
+    ConstraintDescription: 'Must be >= 1'
+    MinValue: 1
+  Image:
+    Description: 'The image to use for a container, which is passed directly to the Docker daemon. You can use images in the Docker Hub registry or specify other repositories (repository-url/image:tag).'
+    Type: String
+    Default: 139013895924.dkr.ecr.us-east-1.amazonaws.com/zeroconnect-sql:latest
+  SecretARN:
+    Description: 'Arn of the secret from which the environment variables are read.'
+    Type: String
+    Default: ''
+  DesiredCount:
+    Description: 'The number of simultaneous tasks, that you want to run on the cluster.'
+    Type: Number
+    Default: 1
+    ConstraintDescription: 'Must be >= 1'
+    MinValue: 1
+  MaxCapacity:
+    Description: 'The maximum number of simultaneous tasks, that you want to run on the cluster.'
+    Type: Number
+    Default: 4
+    ConstraintDescription: 'Must be >= 1'
+    MinValue: 1
+  MinCapacity:
+    Description: 'The minimum number of simultaneous tasks, that you want to run on the cluster.'
+    Type: Number
+    Default: 1
+    ConstraintDescription: 'Must be >= 1'
+    MinValue: 1
+  AutoScaling:
+    Description: 'Scale number of tasks based on CPU load?'
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+Rules:
+  SubnetsInVPC:
+    Assertions:
+      - Assert: !EachMemberIn [!ValueOfAll ['AWS::EC2::Subnet::Id', VpcId], !RefAll 'AWS::EC2::VPC::Id']
+        AssertDescription: All subnets must in the VPC
+Mappings:
+  RegionMap:
+    'af-south-1':
+      ECSAMI: 'ami-0974da6f95845d1fb'
+    'eu-north-1':
+      ECSAMI: 'ami-08056d04e24f84e34'
+    'ap-south-1':
+      ECSAMI: 'ami-05df77ec905ed3dcf'
+    'eu-west-3':
+      ECSAMI: 'ami-0f41f5b130d9f1ef4'
+    'eu-west-2':
+      ECSAMI: 'ami-0d87e866e25e832fe'
+    'eu-south-1':
+      ECSAMI: 'ami-0ce4f99696dc699c3'
+    'eu-west-1':
+      ECSAMI: 'ami-0c21ebd9e0dbd6249'
+    'ap-northeast-3':
+      ECSAMI: 'ami-076672d8d1177c3c7'
+    'ap-northeast-2':
+      ECSAMI: 'ami-0ef7a2936ae1e00cc'
+    'me-south-1':
+      ECSAMI: 'ami-098003f7b45e61256'
+    'ap-northeast-1':
+      ECSAMI: 'ami-07beb9196f84744a6'
+    'sa-east-1':
+      ECSAMI: 'ami-0b098a101dfecaeaf'
+    'ca-central-1':
+      ECSAMI: 'ami-0c133a38764018681'
+    'ap-east-1':
+      ECSAMI: 'ami-02d10fa17a222e90b'
+    'ap-southeast-1':
+      ECSAMI: 'ami-095997bc097212f6f'
+    'ap-southeast-2':
+      ECSAMI: 'ami-0e14619ff8da67b1f'
+    'eu-central-1':
+      ECSAMI: 'ami-0262c9b663f67241e'
+    'ap-southeast-3':
+      ECSAMI: 'ami-0188331858e372ee8'
+    'us-east-1':
+      ECSAMI: 'ami-0f260fe26c2826a3d'
+    'us-east-2':
+      ECSAMI: 'ami-09ca0a8af1c65c842'
+    'us-west-1':
+      ECSAMI: 'ami-0c1f28679e0c1a694'
+    'us-west-2':
+      ECSAMI: 'ami-0e0e34cdb5fd714fc'
+Conditions:
+  HasLoadBalancerSchemeInternal: !Equals [!Ref LoadBalancerScheme, 'internal']
+  HasLoadBalancerCertificateArn: !Not [!Equals [!Ref LoadBalancerCertificateArn, '']]
+  HasAutoScaling: !Equals [!Ref AutoScaling, 'true']
+Resources:
+  Topic:
+    Type: 'AWS::SNS::Topic'
+    Properties: {}
+  FallbackTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties: {}
+  TopicPolicy:
+    Type: 'AWS::SNS::TopicPolicy'
+    Properties:
+      PolicyDocument:
+        Id: Id1
+        Version: '2012-10-17'
+        Statement:
+        - Sid: Sid1
+          Effect: Allow
+          Principal:
+            Service:
+            - 'events.amazonaws.com' # Allow CloudWatch Events
+            - 'budgets.amazonaws.com' # Allow Budget Notifications
+            - 'rds.amazonaws.com' # Allow RDS Events
+            - 's3.amazonaws.com' # Allow S3 Event Notifications
+            - 'backup.amazonaws.com' # Allow Backup Events
+            - 'codestar-notifications.amazonaws.com' # Allow CodeStart Notifications
+          Action: 'sns:Publish'
+          Resource: !Ref Topic
+        - Sid: Sid2
+          Effect: Allow
+          Principal:
+            AWS: '*' # Allow CloudWatch Alarms, ElastiCache Notifications, Elastic Beanstalk Notifications, Auto Scaling Notification
+          Action: 'sns:Publish'
+          Resource: !Ref Topic
+          Condition:
+            StringEquals:
+              'AWS:SourceOwner': !Ref 'AWS::AccountId'
+        - Sid: Sid3
+          Effect: Allow
+          Principal:
+            Service: 'ses.amazonaws.com' # Allow SES Notifications & Events
+          Action: 'sns:Publish'
+          Resource: !Ref Topic
+          Condition:
+            StringEquals:
+              'AWS:Referer': !Ref 'AWS::AccountId'
+      Topics:
+      - !Ref Topic
+  NumberOfNotificationsFailedTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Alerts could not be delivered'
+      Namespace: 'AWS/SNS'
+      MetricName: NumberOfNotificationsFailed
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 0
+      AlarmActions:
+      - !Ref FallbackTopic
+      Dimensions:
+      - Name: TopicName
+        Value: !GetAtt Topic.TopicName
+      TreatMissingData: notBreaching
+  Cluster:
+    Type: 'AWS::ECS::Cluster'
+    Properties: 
+      ClusterName: !Ref ClusterName
+  LogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      RetentionInDays: '14'
+  InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+      - !Ref Role
+  Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'ec2.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      ManagedPolicyArns: !Ref 'AWS::NoValue'
+      PermissionsBoundary:  !Ref 'AWS::NoValue'
+      Policies:
+      - PolicyName: ssm
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ssmmessages:*' # SSM Agent by https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-setting-up-messageAPIs.html
+            - 'ssm:UpdateInstanceInformation' # SSM agent by https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-setting-up-messageAPIs.html
+            - 'ec2messages:*' # SSM Session Manager by https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-setting-up-messageAPIs.html
+            Resource: '*'
+      - PolicyName: ecs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ecs:DiscoverPollEndpoint'
+            Resource: '*'
+      - PolicyName: ecs-cluster
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ecs:RegisterContainerInstance'
+            - 'ecs:SubmitContainerStateChange'
+            - 'ecs:SubmitTaskStateChange'
+            - 'ecs:ListContainerInstances'
+            Resource: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${Cluster}'
+      - PolicyName: ecs-cluster-instance
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ecs:Poll'
+            - 'ecs:StartTelemetrySession'
+            - 'ecs:UpdateContainerInstancesState'
+            - 'ecs:ListTasks'
+            - 'ecs:DescribeContainerInstances'
+            Resource: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:container-instance/*'
+            Condition:
+              'StringEquals':
+                'ecs:cluster':
+                  !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${Cluster}'
+      - PolicyName: ecr
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ecr:GetAuthorizationToken'
+            - 'ecr:BatchCheckLayerAvailability'
+            - 'ecr:GetDownloadUrlForLayer'
+            - 'ecr:BatchGetImage'
+            Resource: '*'
+      - PolicyName: logs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'logs:CreateLogGroup'
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+            - 'logs:DescribeLogStreams'
+            Resource: !GetAtt 'LogGroup.Arn'
+  ALBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'ecs-cluster-alb'
+      VpcId: !Sub ${VPC}
+  ALBSecurityGroupInHttpWorld:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref ALBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: '0.0.0.0/0'
+  ALBSecurityGroupInHttpsWorld:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: HasLoadBalancerCertificateArn
+    Properties:
+      GroupId: !Ref ALBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: '0.0.0.0/0'
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'ecs-cluster'
+      VpcId: !Sub ${VPC}
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: !Ref ALBSecurityGroup
+        FromPort: 0
+        ToPort: 65535
+        IpProtocol: tcp
+  SecurityGroupInSSHWorld:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      CidrIp: '0.0.0.0/0'
+  LoadBalancer: # not monitored, but DefaultTargetGroup is monitored!
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      LoadBalancerAttributes:
+      - Key: 'idle_timeout.timeout_seconds'
+        Value: '60'
+      - Key: 'routing.http2.enabled'
+        Value: 'true'
+      Scheme: !Ref LoadBalancerScheme
+      SecurityGroups:
+      - !Ref ALBSecurityGroup
+      Subnets: !If
+      - HasLoadBalancerSchemeInternal
+      - !Ref SubnetsPrivate
+      - !Ref SubnetsPublic
+  DefaultTargetGroup: # this is used as the fall-back target group and is used to health checking the ECS agent. Services use their own ListenerRules to accept traffic based on path prefixes.
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 15
+      HealthCheckPort: '51678'
+      HealthCheckPath: '/v1/metadata'
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200-299'
+      Port: 80 # port 80 is a reserved port that is never used by the agent, so we are safe to use it here
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetGroupAttributes:
+      - Key: 'deregistration_delay.timeout_seconds'
+        Value: '0'
+  HttpListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref DefaultTargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+  HttpsListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Condition: HasLoadBalancerCertificateArn
+    Properties:
+      Certificates:
+      - CertificateArn: !Ref LoadBalancerCertificateArn
+      DefaultActions:
+      - TargetGroupArn: !Ref DefaultTargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: 'ELBSecurityPolicy-FS-1-2-Res-2019-08'
+  LaunchTemplate:
+    Type: 'AWS::EC2::LaunchTemplate'
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          default: [awslogs, install]
+        awslogs:
+          packages:
+            yum:
+              awslogs: []
+          files:
+            '/etc/awslogs/awscli.conf':
+              content: !Sub |
+                [default]
+                region = ${AWS::Region}
+                [plugins]
+                cwlogs = cwlogs
+              mode: '000644'
+              owner: root
+              group: root
+            '/etc/awslogs/awslogs.conf':
+              content: !Sub |
+                [general]
+                state_file = /var/lib/awslogs/agent-state
+                [/var/log/amazon/ssm/amazon-ssm-agent.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/amazon/ssm/amazon-ssm-agent.log
+                log_stream_name = {instance_id}/var/log/amazon/ssm/amazon-ssm-agent.log
+                log_group_name = ${LogGroup}
+                [/var/log/amazon/ssm/errors.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/amazon/ssm/errors.log
+                log_stream_name = {instance_id}/var/log/amazon/ssm/errors.log
+                log_group_name = ${LogGroup}
+                [/var/log/audit/audit.log]
+                file = /var/log/audit/audit.log
+                log_stream_name = {instance_id}/var/log/audit/audit.log
+                log_group_name = ${LogGroup}
+                [/var/log/awslogs.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/awslogs.log
+                log_stream_name = {instance_id}/var/log/awslogs.log
+                log_group_name = ${LogGroup}
+                [/var/log/boot.log]
+                file = /var/log/boot.log
+                log_stream_name = {instance_id}/var/log/boot.log
+                log_group_name = ${LogGroup}
+                [/var/log/cfn-hup.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-hup.log
+                log_stream_name = {instance_id}/var/log/cfn-hup.log
+                log_group_name = ${LogGroup}
+                [/var/log/cfn-init-cmd.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-init-cmd.log
+                log_stream_name = {instance_id}/var/log/cfn-init-cmd.log
+                log_group_name = ${LogGroup}
+                [/var/log/cfn-init.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-init.log
+                log_stream_name = {instance_id}/var/log/cfn-init.log
+                log_group_name = ${LogGroup}
+                [/var/log/cfn-wire.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-wire.log
+                log_stream_name = {instance_id}/var/log/cfn-wire.log
+                log_group_name = ${LogGroup}
+                [/var/log/cloud-init-output.log]
+                file = /var/log/cloud-init-output.log
+                log_stream_name = {instance_id}/var/log/cloud-init-output.log
+                log_group_name = ${LogGroup}
+                [/var/log/cloud-init.log]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/cloud-init.log
+                log_stream_name = {instance_id}/var/log/cloud-init.log
+                log_group_name = ${LogGroup}
+                [/var/log/cron]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/cron
+                log_stream_name = {instance_id}/var/log/cron
+                log_group_name = ${LogGroup}
+                [/var/log/dmesg]
+                file = /var/log/dmesg
+                log_stream_name = {instance_id}/var/log/dmesg
+                log_group_name = ${LogGroup}
+                [/var/log/grubby_prune_debug]
+                file = /var/log/grubby_prune_debug
+                log_stream_name = {instance_id}/var/log/grubby_prune_debug
+                log_group_name = ${LogGroup}
+                [/var/log/maillog]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/maillog
+                log_stream_name = {instance_id}/var/log/maillog
+                log_group_name = ${LogGroup}
+                [/var/log/messages]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/messages
+                log_stream_name = {instance_id}/var/log/messages
+                log_group_name = ${LogGroup}
+                [/var/log/secure]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/secure
+                log_stream_name = {instance_id}/var/log/secure
+                log_group_name = ${LogGroup}
+                [/var/log/yum.log]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/yum.log
+                log_stream_name = {instance_id}/var/log/yum.log
+                log_group_name = ${LogGroup}
+              mode: '000644'
+              owner: root
+              group: root
+            '/etc/awslogs/config/ecs.conf':
+              content: !Sub |
+                [/var/log/ecs/ecs-init.log]
+                file = /var/log/ecs/ecs-init.log
+                log_stream_name = {instance_id}/var/log/ecs/ecs-init.log
+                log_group_name = ${LogGroup}
+                datetime_format = %Y-%m-%dT%H:%M:%SZ
+                [/var/log/ecs/ecs-agent.log]
+                file = /var/log/ecs/ecs-agent.log.*
+                log_stream_name = {instance_id}/var/log/ecs/ecs-agent.log
+                log_group_name = ${LogGroup}
+                datetime_format = %Y-%m-%dT%H:%M:%SZ
+              mode: '000644'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              awslogsd:
+                enabled: true
+                ensureRunning: true
+                packages:
+                  yum:
+                  - awslogs
+                files:
+                - '/etc/awslogs/awslogs.conf'
+                - '/etc/awslogs/awscli.conf'
+                - '/etc/awslogs/config/ecs.conf'
+        install:
+          packages:
+            yum:
+              amazon-ssm-agent: []
+          files:
+            '/etc/cfn/cfn-hup.conf':
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=1
+              mode: '000400'
+              owner: root
+              group: root
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.LaunchTemplate.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init --verbose --stack=${AWS::StackName} --region=${AWS::Region} --resource=LaunchTemplate
+                runas=root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                - '/etc/cfn/cfn-hup.conf'
+                - '/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+              amazon-ssm-agent:
+                enabled: true
+                ensureRunning: true
+                packages:
+                  yum:
+                  - amazon-ssm-agent
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+        - DeviceName: '/dev/xvda'
+          Ebs:
+            Encrypted: true
+            VolumeType: gp3
+        IamInstanceProfile:
+          Name: !Ref InstanceProfile
+        ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', ECSAMI]
+        InstanceType: !Ref InstanceType
+        MetadataOptions:
+          HttpPutResponseHopLimit: 2 # support Docker containers
+          HttpTokens: required
+        SecurityGroupIds: 
+          - !GetAtt 'SecurityGroup.GroupId'
+        UserData:
+          'Fn::Base64': !Sub |
+            #!/bin/bash -ex
+            trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource AutoScalingGroup --region ${AWS::Region}' ERR
+            echo "ECS_CLUSTER=${Cluster}" >> /etc/ecs/ecs.config
+            echo "ECS_CONTAINER_STOP_TIMEOUT=30s" >> /etc/ecs/ecs.config
+            echo "ECS_ALLOW_OFFHOST_INTROSPECTION_ACCESS=true" >> /etc/ecs/ecs.config
+            yum install -y aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchTemplate --region ${AWS::Region}
+            /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource AutoScalingGroup --region ${AWS::Region}
+  AutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      Cooldown: '600'
+      HealthCheckGracePeriod: 900 # needs to be in sync with CreationPolicy/UpdatePolicy timeout
+      HealthCheckType: ELB
+      TargetGroupARNs:
+      - !Ref DefaultTargetGroup
+      NotificationConfigurations:
+      - NotificationTypes:
+        - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+        - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+        TopicARN: !Ref Topic
+      MetricsCollection:
+      - Granularity: '1Minute'
+        Metrics:
+        - 'GroupDesiredCapacity'
+      VPCZoneIdentifier: !Ref SubnetsPrivate
+      Tags:
+      - Key: Name
+        Value: 'ecs-cluster'
+        PropagateAtLaunch: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        PauseTime: PT15M
+        SuspendProcesses:
+        - HealthCheck
+        - ReplaceUnhealthy
+        - AZRebalance
+        - AlarmNotification
+        - ScheduledActions
+        WaitOnResourceSignals: true
+  CapacityProvider:
+    Type: 'AWS::ECS::CapacityProvider'
+    Properties: 
+      Name: !Sub '${ClusterName}-CapacityProvider'
+      AutoScalingGroupProvider: 
+        AutoScalingGroupArn: !Ref AutoScalingGroup
+        ManagedScaling: 
+          InstanceWarmupPeriod: 300
+          MaximumScalingStepSize: 100
+          MinimumScalingStepSize: 1
+          Status: ENABLED
+          TargetCapacity: 80
+        ManagedTerminationProtection: DISABLED
+      Tags: 
+      - Key: Name
+        Value: 'ecs-cluster'
+  CapacityProviderAssociations:
+    Type: 'AWS::ECS::ClusterCapacityProviderAssociations'
+    Properties:
+      CapacityProviders:
+      - !Ref CapacityProvider
+      Cluster: !Ref Cluster
+      DefaultCapacityProviderStrategy:
+      - Base: 0
+        Weight: 1
+        CapacityProvider: !Ref CapacityProvider
+  AutoScalingGroupLifecycleHookQueue:
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-lifecycle-hook'
+      VisibilityTimeout: 60
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt 'AutoScalingGroupLifecycleHookDeadLetterQueue.Arn'
+        maxReceiveCount: 5
+  AutoScalingGroupLifecycleHookDeadLetterQueue:
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-lifecycle-hook-dlq'
+  AutoScalingGroupLifecycleHookIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'autoscaling.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      PermissionsBoundary:  !Ref 'AWS::NoValue'
+      Policies:
+      - PolicyName: sqs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Sid: write
+            Effect: Allow
+            Action:
+            - 'sqs:SendMessage'
+            - 'sqs:GetQueueUrl'
+            Resource: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
+  AutoScalingGroupTerminatingLifecycleHook:
+    Type: 'AWS::AutoScaling::LifecycleHook'
+    Properties:
+      HeartbeatTimeout: 600
+      DefaultResult: CONTINUE
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      LifecycleTransition: 'autoscaling:EC2_INSTANCE_TERMINATING'
+      NotificationTargetARN: !GetAtt 'AutoScalingGroupLifecycleHookQueue.Arn'
+      RoleARN: !GetAtt 'AutoScalingGroupLifecycleHookIAMRole.Arn'
+  TaskExectionRole: 
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'ecs-tasks.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      Policies:
+      - PolicyName: ecsTaskSecret
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ssm:GetParameters'
+            - 'secretsmanager:GetSecretValue'
+            - 'kms:Decrypt'
+            Resource: 
+            - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*'
+            - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*'
+            - !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+      - PolicyName: ecsTaskECR
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ecr:GetDownloadUrlForLayer'
+            - 'ecr:BatchGetImage'
+            - 'ecr:BatchCheckLayerAvailability'
+            - 'ecr:GetAuthorizationToken'
+            Resource: '*'
+      - PolicyName: logs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'logs:CreateLogGroup'
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+            - 'logs:DescribeLogStreams'
+            Resource: '*'
+  TaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Family: !Ref 'AWS::StackName'
+      ExecutionRoleArn: !GetAtt 'TaskExectionRole.Arn'
+      NetworkMode: bridge
+      ContainerDefinitions:
+      - Name: zerosystemsapi # if you change this, you also must change the AWS::ECS::Service
+        Image: !Ref Image
+        Memory: 128
+        Cpu: 128
+        PortMappings:
+        - ContainerPort: 80 # if you change this, you also must change the AWS::ECS::Service
+          Protocol: tcp
+        Secrets: 
+        - Name: 'ExternalJson'
+          ValueFrom: !Sub '${SecretARN}'
+        Essential: true
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            'awslogs-region': !Ref 'AWS::Region'
+            'awslogs-group': !Ref 'LogGroup'
+            'awslogs-stream-prefix': !Ref 'AWS::StackName'
+  LoadBalancerTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 15
+      HealthCheckPath: '/v1/docs.json'
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200'
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '60'
+  LoadBalancerHttpListenerRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref LoadBalancerTargetGroup
+      Conditions: 
+        - Field: path-pattern
+          Values: 
+          - '/*'
+      ListenerArn: !Ref HttpListener
+      Priority: 1
+  LoadBalancerHttpsListenerRule:
+    Condition: HasLoadBalancerCertificateArn
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref LoadBalancerTargetGroup
+      Conditions: 
+        - Field: path-pattern
+          Values: 
+          - '/*'
+      ListenerArn: !Ref HttpsListener
+      Priority: 1
+  ServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      ManagedPolicyArns:
+      - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole'
+      AssumeRolePolicyDocument:
+        Version: '2008-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'ecs.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      PermissionsBoundary: !Ref 'AWS::NoValue'
+  Service:
+    Type: 'AWS::ECS::Service'
+    DependsOn: [ LoadBalancerHttpListenerRule, CapacityProvider ]
+    Properties:
+      Cluster: !Ref Cluster
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DesiredCount: !Ref DesiredCount
+      HealthCheckGracePeriodSeconds: '300'
+      LoadBalancers:
+      - ContainerName: zerosystemsapi
+        ContainerPort: 80
+        TargetGroupArn: !Ref LoadBalancerTargetGroup
+      PlacementStrategies:
+      - Type: spread
+        Field: 'attribute:ecs.availability-zone'
+      - Type: spread
+        Field: instanceId
+      Role: !GetAtt 'ServiceRole.Arn'
+      TaskDefinition: !Ref TaskDefinition
+  ScalableTargetRole: # based on http://docs.aws.amazon.com/AmazonECS/latest/developerguide/autoscale_IAM_role.html
+    Condition: HasAutoScaling
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'application-autoscaling.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      PermissionsBoundary: !Ref 'AWS::NoValue'
+      Policies:
+      - PolicyName: ecs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ecs:DescribeServices'
+            - 'ecs:UpdateService'
+            Resource: '*'
+      - PolicyName: cloudwatch
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'cloudwatch:DescribeAlarms'
+            Resource: '*'
+  ScalableTarget:
+    Condition: HasAutoScaling
+    Type: 'AWS::ApplicationAutoScaling::ScalableTarget'
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub
+      - 'service/${Cluster}/${Service}'
+      - Cluster: !Ref Cluster
+        Service: !GetAtt 'Service.Name'
+      RoleARN: !GetAtt 'ScalableTargetRole.Arn'
+      ScalableDimension: 'ecs:service:DesiredCount'
+      ServiceNamespace: ecs
+  ScaleUpPolicyService:
+    Condition: HasAutoScaling
+    DependsOn: Service
+    Type: 'AWS::ApplicationAutoScaling::ScalingPolicy'
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-scale-up'
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ScalableTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: PercentChangeInCapacity
+        Cooldown: 300
+        MinAdjustmentMagnitude: 1
+        StepAdjustments:
+        - MetricIntervalLowerBound: 0
+          ScalingAdjustment: 25
+  ScaleDownPolicyService:
+    Condition: HasAutoScaling
+    DependsOn: Service
+    Type: 'AWS::ApplicationAutoScaling::ScalingPolicy'
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-scale-down'
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ScalableTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: PercentChangeInCapacity
+        Cooldown: 300
+        MinAdjustmentMagnitude: 1
+        StepAdjustments:
+        - MetricIntervalUpperBound: 0
+          ScalingAdjustment: -25
+  CPUUtilizationHighAlarm:
+    Condition: HasAutoScaling
+    Type: 'AWS::CloudWatch::Alarm'
+    DependsOn: Service
+    Properties:
+      AlarmDescription: 'Service is running out of CPU'
+      Namespace: 'AWS/ECS'
+      Dimensions:
+      - Name: ClusterName
+        Value: !Ref Cluster
+      - Name: ServiceName
+        Value: !GetAtt 'Service.Name'
+      MetricName: CPUUtilization
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 60
+      AlarmActions:
+      - !Ref ScaleUpPolicyService
+  CPUUtilizationLowAlarm:
+    Condition: HasAutoScaling
+    Type: 'AWS::CloudWatch::Alarm'
+    DependsOn: Service
+    Properties:
+      AlarmDescription: 'Service is wasting CPU'
+      Namespace: 'AWS/ECS'
+      Dimensions:
+      - Name: ClusterName
+        Value: !Ref Cluster
+      - Name: ServiceName
+        Value: !GetAtt 'Service.Name'
+      MetricName: CPUUtilization
+      ComparisonOperator: LessThanThreshold
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 30
+      AlarmActions:
+      - !Ref ScaleDownPolicyService
+  CPUUtilizationTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Average CPU utilization over last 10 minutes higher than 80%'
+      Namespace: 'AWS/ECS'
+      Dimensions:
+      - Name: ClusterName
+        Value: !Ref Cluster
+      - Name: ServiceName
+        Value: !GetAtt 'Service.Name'
+      MetricName: CPUUtilization
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 80
+      AlarmActions:
+      - !Ref Topic
+  ServiceFailedNotification:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      EventPattern:
+        source:
+        - 'aws.ecs'
+        'detail-type':
+        - 'ECS Service Action'
+        resources:
+        - !Ref Service
+        detail:
+          eventType:
+          - ERROR
+          - WARN
+      State: ENABLED
+      Targets:
+      - Arn: !Ref Topic
+        Id: rule
+  HTTPCodeTarget5XXTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Application load balancer receives 5XX HTTP status codes from targets'
+      Namespace: 'AWS/ApplicationELB'
+      MetricName: HTTPCode_Target_5XX_Count
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 0
+      AlarmActions:
+      - !Ref Topic
+      Dimensions:
+      - Name: LoadBalancer
+        Value: !GetAtt 'LoadBalancer.LoadBalancerFullName'
+      - Name: TargetGroup
+        Value: !GetAtt LoadBalancerTargetGroup.TargetGroupFullName
+      TreatMissingData: notBreaching
+  TargetConnectionErrorCountTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Application load balancer could not connect to targets'
+      Namespace: 'AWS/ApplicationELB'
+      MetricName: TargetConnectionErrorCount
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 0
+      AlarmActions:
+      - !Ref Topic
+      Dimensions:
+      - Name: LoadBalancer
+        Value: !GetAtt 'LoadBalancer.LoadBalancerFullName'
+      - Name: TargetGroup
+        Value: !GetAtt LoadBalancerTargetGroup.TargetGroupFullName
+      TreatMissingData: notBreaching
+Outputs:
+  TemplateID:
+    Description: 'template id.'
+    Value: 'ecs/cluster'
+  TemplateVersion:
+    Description: 'template version.'
+    Value: '0.1.22'
+  StackName:
+    Description: 'Stack name.'
+    Value: !Sub '${AWS::StackName}'
+  Cluster:
+    Description: 'ECS cluster.'
+    Value: !Ref Cluster
+    Export:
+      Name: !Sub '${AWS::StackName}-Cluster'
+  LoadBalancerFullName:
+    Description: 'ALB full name for services.'
+    Value: !GetAtt 'LoadBalancer.LoadBalancerFullName'
+    Export:
+      Name: !Sub '${AWS::StackName}-LoadBalancerFullName'
+  HttpListener:
+    Description: 'ALB HTTP listener for services.'
+    Value: !Ref HttpListener
+    Export:
+      Name: !Sub '${AWS::StackName}-HttpListener'
+  HttpsListener:
+    Condition: HasLoadBalancerCertificateArn
+    Description: 'ALB HTTPS listener for services.'
+    Value: !Ref HttpsListener
+    Export:
+      Name: !Sub '${AWS::StackName}-HttpsListener'
+  CanonicalHostedZoneID:
+    Description: 'The ID of the Amazon Route 53 hosted zone associated with the load balancer.'
+    Value: !GetAtt LoadBalancer.CanonicalHostedZoneID
+    Export:
+      Name: !Sub '${AWS::StackName}-CanonicalHostedZoneID'
+  LogGroup:
+    Description: 'Log group of ECS cluster.'
+    Value: !Ref LogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-LogGroup'
+  DNSName:
+    Description: 'The DNS name for the ECS cluster load balancer.'
+    Value: !GetAtt 'LoadBalancer.DNSName'
+    Export:
+      Name: !Sub '${AWS::StackName}-DNSName'
+  URL:
+    Description: 'URL to the ECS cluster.'
+    Value: !Sub 'http://${LoadBalancer.DNSName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-URL'
+  VPC:
+    Description: 'VPC of ECS cluster.'
+    Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VPC'
+  SecurityGroup:
+    Description: 'Security Group of ECS cluster.'
+    Value: !Ref SecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-SecurityGroup'
+  ServiceURL:
+    Description: 'URL to the ECS service.' # TODO does not work with LoadBalancerHostPattern
+    Value: !Sub
+    - 'http://${ClusterURL}${Path}'
+    - ClusterURL: !GetAtt 'LoadBalancer.DNSName'
+      Path: '/v1/docs'
+    Export:
+      Name: !Sub '${AWS::StackName}-ServiceURL'
+  TopicARN:
+    Description: 'The ARN of the alert topic.'
+    Value: !Ref Topic
+    Export:
+      Name: !Sub '${AWS::StackName}-TopicARN'
+  TopicName:
+    Description: 'The name of the alert topic.'
+    Value: !GetAtt 'Topic.TopicName'
+    Export:
+      Name: !Sub '${AWS::StackName}-TopicName'

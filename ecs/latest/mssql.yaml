@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This CloudFormation script provisions a RDS instance and create Secret. '
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Parent Stacks'
+      Parameters:
+      - ParentVPCStack
+    - Label:
+        default: 'RDS Parameters'
+      Parameters:
+      - ClusterName
+      - DBPortNumber
+      - AllocatedStorage
+      - DBInstanceClass
+      - Engine
+      - DBName
+      - MasterUsername
+      - MasterUserPassword
+Parameters:
+  ParentVPCStack:
+    Description: 'Stack name of parent VPC stack template.'
+    Type: String
+    Default: 'vpc'
+  DBPortNumber:
+    Description: The port number on which the database accepts connections.
+    Type: Number
+    Default: '1433'
+    MinValue: '1150'
+    MaxValue: '65535'
+    ConstraintDescription: 1150-65535 except for 1434, 3389, 47001, 49152, and 49152
+  AllocatedStorage:
+    Description: The allocated storage size, specified in gigabytes (GB).
+    Type: String
+    AllowedPattern: "^([2-9]?[0-9]{1}|[0-9]{3,4}|1[0-5]?[0-9]{3}|16[0-2]?[0-9]{2}|163[0-7]?[0-9]{1}|1638[0-4]?)$"
+    ConstraintDescription: "Value must be a valid number between 20-16384."
+    Default: 20
+  DBInstanceClass:
+    Description: The name of the compute and memory capacity classes of the DB instance.
+    Type: String
+    Default: db.t3.small
+  Engine:
+    Description: The name of the database engine to be used for this instance.
+    Type: String
+    AllowedValues: [sqlserver-ee, sqlserver-se, sqlserver-ex, sqlserver-web]
+    ConstraintDescription: "Please specify either a sqlserver-ee, sqlserver-se, sqlserver-ex, or sqlserver-web engine for the RDS instance."
+    Default: sqlserver-ex
+  MasterUsername:
+    Description: The master user name for the DB instance.
+    Type: String
+    Default: 'admin'
+  MasterUserPassword:
+    Description: The master password for the DB instance.
+    Type: String
+    NoEcho: true
+    Default: 'testpassword'  
+  DBName:
+    Description: DB instance Name.
+    Type: String
+    Default: 'zerodb'
+Resources:
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow client access
+      VpcId: {'Fn::ImportValue': !Sub '${ParentVPCStack}::VPC'}
+  InboudRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RDSSecurityGroup 
+      IpProtocol: tcp
+      FromPort: !Ref DBPortNumber
+      ToPort: !Ref DBPortNumber
+      CidrIp: {'Fn::ImportValue': !Sub '${ParentVPCStack}::CIDR'}
+  OutboundRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref RDSSecurityGroup 
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      CidrIp: 0.0.0.0/0      
+  MSSQL:
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      AllocatedStorage: !Ref AllocatedStorage
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: false
+      BackupRetentionPeriod:  7
+      CopyTagsToSnapshot: true
+      DBInstanceClass: !Ref DBInstanceClass
+      DBInstanceIdentifier: !Ref DBName
+      Engine: !Ref Engine
+      LicenseModel: license-included
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      MultiAZ: false
+      MonitoringInterval: 0 
+      DBSubnetGroupName: !Ref DBSubnetGroupName
+      VPCSecurityGroups: 
+        - !GetAtt RDSSecurityGroup.GroupId
+      PubliclyAccessible: false 
+      StorageType: gp2
+      Tags:
+        - Key: Name
+          Value: !Sub
+          - ${AWS::StackName}-${Name}
+          - { Name: !Ref Engine }
+  DBSubnetGroupName:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties: 
+      DBSubnetGroupDescription: Private Subnet Group for RDS
+      DBSubnetGroupName: !Sub ${AWS::StackName}-RDSSubnetGroup
+      SubnetIds: 
+        - !Select [0, { "Fn::Split" : [ ",", {'Fn::ImportValue': !Sub '${ParentVPCStack}::SubnetsPrivate'}]}]
+        - !Select [1, { "Fn::Split" : [ ",", {'Fn::ImportValue': !Sub '${ParentVPCStack}::SubnetsPrivate'}]}]
+        - !Select [2, { "Fn::Split" : [ ",", {'Fn::ImportValue': !Sub '${ParentVPCStack}::SubnetsPrivate'}]}]
+      Tags: 
+        - Key: Name
+          Value: !Sub
+          - ${AWS::StackName}-Name
+          - { Name: !Ref DBName }
+Outputs:
+  ZCDBDATABASENAME:
+    Description: 'DATABASENAME'
+    Value: !Ref DBName
+  ZCDBSERVERURL:
+    Description: 'SERVERURL'
+    Value: !GetAtt MSSQL.Endpoint.Address
+  ZCDBUSERNAME:
+    Description: 'USERNAME'
+    Value: !Ref MasterUsername
