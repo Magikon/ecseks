@@ -3,12 +3,14 @@ apiVersion: secrets-store.csi.x-k8s.io/v1
 kind: SecretProviderClass
 metadata:
   name: aws-secrets
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86
 spec:
   provider: aws
   parameters:
     objects: |
-        - objectName: "config.json"
-          objectType: "secretsmanager"
+      - objectName: "config.json"
+        objectType: "secretsmanager"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -16,6 +18,8 @@ metadata:
   labels:
     io.kompose.service: zeroconnectapi
   name: zeroconnectapi
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86
 spec:
   replicas: 1
   selector:
@@ -36,13 +40,15 @@ spec:
               secretProviderClass: "aws-secrets"
       containers:
         - name: zero-api
-          image: zeroapp/zeroconnectapi:1.9.0.39
+          image: registry.zerosystems.com/zeroconnectapi
           ports:
             - containerPort: 80
           volumeMounts:
             - name: secrets-store-inline
               mountPath: "/app/overrides/"
               readOnly: true
+      imagePullSecrets:
+        - name: awsregcred
       restartPolicy: Always
 ---
 apiVersion: v1
@@ -51,6 +57,8 @@ metadata:
   labels:
     io.kompose.service: zeroconnectapi
   name: zeroconnectapi
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86
 spec:
   ports:
     - name: "http"
@@ -71,11 +79,13 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
     alb.ingress.kubernetes.io/actions.ssl-redirect: '443'
+    # change certificate-arn
+
     alb.ingress.kubernetes.io/certificate-arn: 'arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86'
     alb.ingress.kubernetes.io/healthcheck-path: '/v1/docs'
     alb.ingress.kubernetes.io/success-codes: '301'
     alb.ingress.kubernetes.io/group.name: zerogroup
-    alb.ingress.kubernetes.io/load-balancer-name: zero-alb
+    alb.ingress.kubernetes.io/load-balancer-name: zero-connect
 spec:
   defaultBackend:
     service:
@@ -85,12 +95,14 @@ spec:
   ingressClassName: alb
   rules:
     - host: api.zerosystems.sbs
+      # api.zerosystems.sbs change to your domain
+
       http:
         paths:
-        - path: /
-          pathType: Prefix
-          backend:
-            service:
-              name: zeroconnectapi
-              port:
-                number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: zeroconnectapi
+                port:
+                  number: 80
