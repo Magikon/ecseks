@@ -39,16 +39,14 @@ spec:
             volumeAttributes:
               secretProviderClass: "aws-secrets"
       containers:
-        - name: zero-api
-          image: registry.zerosystems.com/zeroconnectapi
+        - name: zeroconnect-api
+          image: 369588887360.dkr.ecr.us-east-1.amazonaws.com/zeroconnect:latest
           ports:
             - containerPort: 80
           volumeMounts:
             - name: secrets-store-inline
               mountPath: "/app/overrides/"
               readOnly: true
-      imagePullSecrets:
-        - name: awsregcred
       restartPolicy: Always
 ---
 apiVersion: v1

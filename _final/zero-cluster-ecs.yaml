@@ -35,7 +35,7 @@ Metadata:
     - Label:
         default: 'Task Parameters'
       Parameters:
-      - Image
+      - ImageTag
       - Secret
 Parameters:
   ClusterName:
@@ -78,10 +78,10 @@ Parameters:
     Default: 1
     ConstraintDescription: 'Must be >= 1'
     MinValue: 1
-  Image:
-    Description: 'The image to use for a container, which is passed directly to the Docker daemon. You can use images in the Docker Hub registry or specify other repositories (repository-url/image:tag).'
+  ImageTag:
+    Description: 'The image tag to use for a container, which is passed directly to the Docker daemon. You can use images in the Docker Hub registry or specify other repositories (repository-url/image:tag).'
     Type: String
-    Default: 139013895924.dkr.ecr.us-east-1.amazonaws.com/zeroconnect-sql:latest
+    Default: latest
   SecretARN:
     Description: 'Arn of the secret from which the environment variables are read.'
     Type: String
@@ -778,7 +778,7 @@ Resources:
       NetworkMode: bridge
       ContainerDefinitions:
       - Name: zerosystemsapi # if you change this, you also must change the AWS::ECS::Service
-        Image: !Ref Image
+        Image: !Sub '369588887360.dkr.ecr.us-east-1.amazonaws.com/zeroconnect:${ImageTag}'
         Memory: 128
         Cpu: 128
         PortMappings:

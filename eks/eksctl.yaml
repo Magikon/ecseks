@@ -32,8 +32,6 @@ managedNodeGroups:
     minSize: 1
     maxSize: 2
     desiredCapacity: 1
-    ssh: 
-      publicKeyName: ec2-key
     volumeSize: 80
     volumeType: gp2
     privateNetworking: true
@@ -58,8 +56,6 @@ managedNodeGroups:
     minSize: 1
     maxSize: 2
     desiredCapacity: 1
-    ssh: 
-      publicKeyName: ec2-key
     volumeSize: 80
     volumeType: gp2
     privateNetworking: true
@@ -84,8 +80,6 @@ managedNodeGroups:
     minSize: 1
     maxSize: 2
     desiredCapacity: 1
-    ssh: 
-      publicKeyName: ec2-key
     volumeSize: 80
     volumeType: gp2
     privateNetworking: true

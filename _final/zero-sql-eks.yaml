@@ -22,7 +22,7 @@ Parameters:
   ParentVPCStack:
     Description: 'Stack name of parent VPC stack template.'
     Type: String
-    Default: 'vpc'
+    Default: 'eksctl-zerosystems-cluster-cluster'
   DBPortNumber:
     Description: The port number on which the database accepts connections.
     Type: Number
