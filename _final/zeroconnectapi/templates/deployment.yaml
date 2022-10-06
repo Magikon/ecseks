@@ -5,9 +5,7 @@ metadata:
   labels:
     {{- include "zeroconnectapi.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
       {{- include "zeroconnectapi.selectorLabels" . | nindent 6 }}
@@ -24,9 +22,16 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "zeroconnectapi.serviceAccountName" . }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass:   {{ include "zeroconnectapi.fullname" . }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -39,11 +44,11 @@ spec:
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /
+              path: /v1/docs
               port: http
           readinessProbe:
             httpGet:
-              path: /
+              path: /v1/docs
               port: http
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
