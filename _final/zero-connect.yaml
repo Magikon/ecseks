@@ -3,8 +3,6 @@ apiVersion: secrets-store.csi.x-k8s.io/v1
 kind: SecretProviderClass
 metadata:
   name: aws-secrets
-  annotations:
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86
 spec:
   provider: aws
   parameters:
@@ -18,8 +16,6 @@ metadata:
   labels:
     io.kompose.service: zeroconnectapi
   name: zeroconnectapi
-  # annotations:
-    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86
 spec:
   replicas: 1
   selector:
@@ -55,8 +51,6 @@ metadata:
   labels:
     io.kompose.service: zeroconnectapi
   name: zeroconnectapi
-  annotations:
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86
 spec:
   ports:
     - name: "http"
@@ -92,10 +86,7 @@ spec:
         number: 80
   ingressClassName: alb
   rules:
-    - host: api.zerosystems.sbs
-      # api.zerosystems.sbs change to your domain
-
-      http:
+    - http:
         paths:
           - path: /
             pathType: Prefix
