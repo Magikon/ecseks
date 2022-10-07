@@ -135,5 +135,5 @@ spec:
   provider: aws
   parameters:
     objects: |
-      - objectName: "zerotest.json"
+      - objectName: "config.json"
         objectType: "secretsmanager"
