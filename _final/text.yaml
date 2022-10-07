@@ -1,0 +1,139 @@
+---
+# Source: zeroconnectapi/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zero-zeroconnectapi
+  labels:
+    helm.sh/chart: zeroconnectapi-1.9.0
+    app.kubernetes.io/name: zeroconnectapi
+    app.kubernetes.io/instance: zero
+    app.kubernetes.io/version: "1.9.0.40"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: zeroconnectapi
+    app.kubernetes.io/instance: zero
+---
+# Source: zeroconnectapi/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zero-zeroconnectapi
+  labels:
+    helm.sh/chart: zeroconnectapi-1.9.0
+    app.kubernetes.io/name: zeroconnectapi
+    app.kubernetes.io/instance: zero
+    app.kubernetes.io/version: "1.9.0.40"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zeroconnectapi
+      app.kubernetes.io/instance: zero
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: zeroconnectapi
+        app.kubernetes.io/instance: zero
+    spec:
+      serviceAccountName: secretsmanager-policy-sa
+      securityContext:
+        {}
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass:   zero-zeroconnectapi
+      containers:
+        - name: zeroconnectapi
+          securityContext:
+            {}
+          image: "369588887360.dkr.ecr.us-east-1.amazonaws.com/zeroconnect:1.9.0.40"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /v1/docs
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /v1/docs
+              port: http
+          resources:
+            {}
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/app/overrides/"
+              readOnly: true
+      restartPolicy: Always
+---
+# Source: zeroconnectapi/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zero-zeroconnectapi
+  labels:
+    helm.sh/chart: zeroconnectapi-1.9.0
+    app.kubernetes.io/name: zeroconnectapi
+    app.kubernetes.io/instance: zero
+    app.kubernetes.io/version: "1.9.0.40"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    alb.ingress.kubernetes.io/actions.ssl-redirect: "443"
+    alb.ingress.kubernetes.io/group.name: zerogroup
+    alb.ingress.kubernetes.io/healthcheck-path: /v1/docs
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+    alb.ingress.kubernetes.io/load-balancer-name: zero-connect
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-FS-1-2-Res-2020-10
+    alb.ingress.kubernetes.io/success-codes: "301"
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86"
+spec:
+  defaultBackend:
+    service:
+      name: zero-zeroconnectapi
+      port:
+        number: 80
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: zero-zeroconnectapi
+                port:
+                  number: 80
+---
+# Source: zeroconnectapi/templates/secretproviderclass.yaml
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: zero-zeroconnectapi
+  labels:
+    helm.sh/chart: zeroconnectapi-1.9.0
+    app.kubernetes.io/name: zeroconnectapi
+    app.kubernetes.io/instance: zero
+    app.kubernetes.io/version: "1.9.0.40"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  provider: aws
+  parameters:
+    objects: |
+      - objectName: "zerotest.json"
+        objectType: "secretsmanager"

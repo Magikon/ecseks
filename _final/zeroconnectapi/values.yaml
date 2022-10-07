@@ -1,7 +1,7 @@
 # Default values for zeroconnectapi.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
-
+chartName: zeroconnectapi
 replicaCount: 1
 
 image:
@@ -35,16 +35,29 @@ service:
   port: 80
 
 ingress:
-  enabled: false
-  className: "alb"
-  annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: api.zerosystems.sbs
-      paths:
-        - path: /
-          pathType: Prefix
+  enabled: true
+  CertificateARN: 'arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86'
+  ingressClassName: "alb"
+  annotations: 
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-FS-1-2-Res-2020-10
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+    alb.ingress.kubernetes.io/actions.ssl-redirect: '443'
+    alb.ingress.kubernetes.io/healthcheck-path: "/v1/docs"
+    alb.ingress.kubernetes.io/success-codes: '301'
+    alb.ingress.kubernetes.io/group.name: zerogroup
+    alb.ingress.kubernetes.io/load-balancer-name: zero-connect
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: zeroconnectapi
+                port:
+                  number: 80
 
 
 resources: {}
