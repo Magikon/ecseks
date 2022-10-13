@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  zeroconnectapi:
+  - apiVersion: v2
+    appVersion: 1.9.0.41
+    created: "2022-10-11T18:20:54.8744583+04:00"
+    description: A ZeroConnect API Helm chart for Kubernetes
+    digest: c0525cc259d28bd5a95138d5b820ca3ea3fa71cc9f4bd628c589b3c4f6541cc9
+    name: zeroconnectapi
+    type: application
+    urls:
+    - https://charts.zerosystems.sbs/1.9.0/zeroconnectapi-1.9.0.tgz
+    version: 1.9.0
+generated: "2022-10-11T18:20:54.8688743+04:00"

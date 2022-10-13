@@ -8,7 +8,7 @@ image:
   repository: 369588887360.dkr.ecr.us-east-1.amazonaws.com/zeroconnect
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "1.9.0.40"
+  tag: "1.9.0.41"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -17,7 +17,8 @@ serviceAccountName: "secretsmanager-policy-sa"
 
 podAnnotations: {}
 
-secretsName: "config.json"
+#select secret name from your region
+secretsName: "somesecretname"
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -36,7 +37,8 @@ service:
 
 ingress:
   enabled: true
-  CertificateARN: 'arn:aws:acm:us-west-2:139013895924:certificate/2e6f2d7e-db67-4cef-9c52-9eea51a0ae86'
+  # change to your domain certificate arn
+  CertificateARN: ''
   ingressClassName: "alb"
   annotations: 
     alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-FS-1-2-Res-2020-10
@@ -66,11 +68,11 @@ resources: {}
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
+    # cpu: 100m
+    # memory: 128Mi
   # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+    # cpu: 100m
+    # memory: 128Mi
 
 nodeSelector: {}
 
