@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 finalizer(){
-		echo "#!/usr/bin/env bash" >> ./delete.sh
+		echo "#!/usr/bin/env bash" > ./delete.sh
         echo "export AWS_PROFILE=${AWS_PROFILE}" >> ./delete.sh
         echo "export AWS_REGION=${AWS_REGION}" >> ./delete.sh
         tac ./temp.sh >> ./delete.sh
 		rm -f ./temp.sh
+		echo "aws iam delete-policy --policy-arn ${POLICY_ALB_ARN}" >> ./delete.sh
+        echo "aws iam delete-policy --policy-arn ${POLICY_ARN}" >> ./delete.sh
 		chmod +x ./delete.sh
-		echo -e "Script finished"
-		echo -e "If you need to delete the created environment, use the new delete.sh"
+		echo -e "If you need to delete the created environment, use the newly created delete.sh"
+		exit
 }
 
 trap finalizer SIGHUP SIGTRAP SIGKILL SIGABRT ERR EXIT
@@ -29,14 +31,12 @@ export CLUSTER_NAME=${CLUSTER_NAME:-"zerosystems-cluster"}
 export CIDR=${CIDR:-"10.8.0.0/16"}
 GovCloud=${GovCloud:-"no"}
 
-touch ./temp.sh
-
-echo "-----------------"
+echo "---------------------------"
 echo "PROFILE - $AWS_PROFILE"
 echo "REGION - $AWS_REGION"
 echo "Cluster - $CLUSTER_NAME"
 echo "CIDR - $CIDR"
-echo "-----------------"
+echo "---------------------------"
 
 cp --remove-destination zero-eksctl-template.yaml eksctl.yaml
 CIDR=$(sed 's/[&//]/\\&/g' <<<"$CIDR") 
@@ -46,15 +46,23 @@ sed -i "s/CLUSTER_NAME/${CLUSTER_NAME}/g" eksctl.yaml
 sed -i "s/CIDR/${CIDR}/g" eksctl.yaml
 #---
 eksctl create cluster -f ./eksctl.yaml
-echo "eksctl delete cluster -f ./eksctl.yaml" >> ./temp.sh
+echo "eksctl delete cluster -f ./eksctl.yaml" > ./temp.sh
 #---
-export VPC_ID=$(aws ec2 describe-vpcs --region ${AWS_REGION} --filter Name=tag:Name,Values=eksctl-${CLUSTER_NAME}-cluster/VPC --query 'Vpcs[].VpcId' --output text)
-export AWS_ACCOUNT=$(aws sts get-caller-identity --profile ${AWS_PROFILE} --query 'Account' --output text)
+export VPC_ID=$(aws ec2 describe-vpcs --filter Name=tag:Name,Values=eksctl-${CLUSTER_NAME}-cluster/VPC --query 'Vpcs[].VpcId' --output text)
+export AWS_ACCOUNT=$(aws sts get-caller-identity --query 'Account' --output text)
 
-echo "-----------------"
+echo "---------------------------"
 echo "VPC_ID - $VPC_ID"
 echo "AWS_ACCOUNT - $AWS_ACCOUNT"
-echo "-----------------"
+echo "---------------------------"
+#---
+echo "----------------- NOTE -----------------"
+echo "Now you can create RDS in cluster's VPC"
+echo "Or peering RDS's VPC with this VPC."
+echo "When everything will be ready"
+echo "And you have fixed the secret (if needed)."
+read -p "You can press enter"
+
 #---
 if [ "$GovCloud" = "yes" ]
 then
@@ -73,7 +81,6 @@ eksctl create iamserviceaccount \
 --attach-policy-arn=arn:aws:iam::${AWS_ACCOUNT}:policy/AWSLoadBalancerControllerIAMPolicy \
 --approve
 echo "eksctl delete iamserviceaccount --name aws-load-balancer-controller --cluster=${CLUSTER_NAME}" >> ./temp.sh
-echo "aws iam delete-policy --policy-arn ${POLICY_ALB_ARN}" >> ./temp.sh
 #---
 kubectl annotate serviceaccount -n kube-system aws-load-balancer-controller eks.amazonaws.com/sts-regional-endpoints=true 
 #---
@@ -116,7 +123,6 @@ POLICY_ARN=$(aws --query Policy.Arn --output text iam create-policy --policy-nam
 }
 ]
 }')
-echo "aws iam delete-policy --policy-arn ${POLICY_ARN}" >> ./temp.sh
 #---
 eksctl create iamserviceaccount --name secretsmanager-policy-sa --cluster ${CLUSTER_NAME} --attach-policy-arn "$POLICY_ARN" --approve --override-existing-serviceaccounts
 echo "eksctl delete iamserviceaccount --name secretsmanager-policy-sa --cluster ${CLUSTER_NAME}" >> ./temp.sh
