@@ -1,0 +1,97 @@
+apiVersion: eksctl.io/v1alpha5
+availabilityZones:
+- us-west-2a
+- us-west-2b
+- us-west-2c
+iam:
+  vpcResourceControllerPolicy: true
+  withOIDC: true
+kind: ClusterConfig
+metadata:
+  name: zerosystems-cluster
+  region: us-west-2
+  version: "1.21"
+privateCluster:
+  enabled: false
+vpc:
+  autoAllocateIPv6: false
+  cidr: 10.8.0.0/16
+  clusterEndpoints:
+    privateAccess: false
+    publicAccess: true
+  manageSharedNodeSecurityGroupRules: true
+  nat:
+    gateway: Single
+cloudWatch:
+    clusterLogging:
+        enableTypes: ["audit", "authenticator", "api", "controllerManager", "scheduler"]
+managedNodeGroups:
+  - name: nodegroup2a
+    amiFamily: AmazonLinux2
+    instanceType: t3.medium
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    volumeSize: 80
+    volumeType: gp2
+    privateNetworking: true
+    availabilityZones: ["us-west-2a"]
+    labels:
+      enviroment: development
+      alpha.eksctl.io/cluster-name: zerosystems-cluster
+      alpha.eksctl.io/nodegroup-name: nodegroup2a
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+      alpha.eksctl.io/nodegroup-name: nodegroup2a
+      alpha.eksctl.io/nodegroup-type: managed
+    iam:
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        cloudWatch: true
+  - name: nodegroup2b
+    amiFamily: AmazonLinux2
+    instanceType: t3.medium
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    volumeSize: 80
+    volumeType: gp2
+    privateNetworking: true
+    availabilityZones: ["us-west-2b"]
+    labels:
+      enviroment: development
+      alpha.eksctl.io/cluster-name: zerosystems-cluster
+      alpha.eksctl.io/nodegroup-name: nodegroup2b
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+      alpha.eksctl.io/nodegroup-name: nodegroup2b
+      alpha.eksctl.io/nodegroup-type: managed
+    iam:
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        cloudWatch: true
+  - name: nodegroup2c
+    amiFamily: AmazonLinux2
+    instanceType: t3.medium
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    volumeSize: 80
+    volumeType: gp2
+    privateNetworking: true
+    availabilityZones: ["us-west-2c"]
+    labels:
+      enviroment: development
+      alpha.eksctl.io/cluster-name: zerosystems-cluster
+      alpha.eksctl.io/nodegroup-name: nodegroup2c
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/enviroment: development
+      alpha.eksctl.io/nodegroup-name: nodegroup2c
+      alpha.eksctl.io/nodegroup-type: managed
+    iam:
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        cloudWatch: true
