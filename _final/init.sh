@@ -86,9 +86,9 @@ kubectl annotate serviceaccount -n kube-system aws-load-balancer-controller eks.
 #---
 helm repo add --force-update eks https://aws.github.io/eks-charts
 helm repo add --force-update secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
-helm repo add --force-update zerosystemsapi https://charts.zerosystems.sbs
+helm repo add --force-update zeroconnectapi https://charts.zerosystems.sbs
 helm repo update
-echo "helm repo remove eks secrets-store-csi-driver zerosystemsapi" >> ./temp.sh
+echo "helm repo remove eks secrets-store-csi-driver zeroconnectapi" >> ./temp.sh
 #---
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system --set clusterName=${CLUSTER_NAME} \
@@ -127,6 +127,5 @@ POLICY_ARN=$(aws --query Policy.Arn --output text iam create-policy --policy-nam
 eksctl create iamserviceaccount --name secretsmanager-policy-sa --cluster ${CLUSTER_NAME} --attach-policy-arn "$POLICY_ARN" --approve --override-existing-serviceaccounts
 echo "eksctl delete iamserviceaccount --name secretsmanager-policy-sa --cluster ${CLUSTER_NAME}" >> ./temp.sh
 #---
-helm install zerosystemsapi zerosystemsapi/zeroconnectapi --version 1.9.0 --set secretsName=${SECRET_NAME} --set ingress.certificateARN=${CERT_ARN} --set image.tag=1.9.0.41
-echo "helm uninstall zerosystemsapi" >> ./temp.sh
-#---
+helm install zeroconnectapi zeroconnectapi/zeroconnectapi --version 1.9.0 --set secretsName=${SECRET_NAME} --set ingress.certificateARN=${CERT_ARN} --set image.tag=1.9.0.41
+echo "helm uninstall zeroconnectapi" >> ./temp.sh
